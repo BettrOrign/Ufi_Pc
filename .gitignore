@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+.mastra/
+*.db
+output.txt
+.env.development
+*.db-*
+.netlify
+.vercel
+
+# Dead code (not used)
+electron/
+src/mastra/
+.agents/
+skills-lock.json
+AGENTS.md
+tsconfig.json

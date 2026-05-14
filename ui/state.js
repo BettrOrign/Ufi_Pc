@@ -1,0 +1,15 @@
+export const state = {
+  ws: null,
+  isConnected: false,
+  isListening: false,
+  audioContext: null,
+  micStream: null,
+  scriptProcessor: null,
+  micSource: null,
+  isSessionActive: false,
+  accumulatedAssistantText: "",
+  currentAssistantMsg: null,
+  outputAudioContext: null,
+  audioQueue: [],
+  isPlaying: false,
+};
