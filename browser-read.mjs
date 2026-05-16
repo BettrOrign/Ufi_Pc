@@ -7,6 +7,51 @@ import { chromium } from 'playwright';
 const url = process.argv[2];
 if (!url) { console.log(JSON.stringify({error:'Usage: node browser-read.mjs <url>'})); process.exit(1); }
 
+// Check if Playwright Chromium is available — if not, fall back to curl
+const { execSync } = await import('child_process');
+let hasChromium = false;
+try {
+  execSync('test -f /home/sirius/.cache/ms-playwright/chromium-*/chrome-linux64/chrome', { shell: true, stdio: 'ignore' });
+  hasChromium = true;
+} catch {}
+if (!hasChromium) {
+  try {
+    execSync('npx playwright install chromium 2>/dev/null || test -f /usr/bin/chromium', { shell: true, stdio: 'ignore' });
+    hasChromium = true;
+  } catch {}
+}
+
+if (!hasChromium) {
+  // Fallback to curl — fetch page content via DuckDuckGo lite or direct curl
+  const http = await import('http');
+  const https = await import('https');
+  
+  const fetchUrl = url.startsWith('https://html.duckduckgo.com') 
+    ? url 
+    : `https://html.duckduckgo.com/html/?q=${encodeURIComponent(url.replace(/https?:\/\/[^/]+\/?/,'').slice(0,50))}`;
+  
+  try {
+    const resp = await fetch(fetchUrl, { 
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    const html = await resp.text();
+    // Strip HTML tags for plain text
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+    console.log(JSON.stringify({
+      title: url,
+      text: text || '[No content fetched]',
+      url,
+      success: true,
+      note: 'Fetched via curl (Playwright Chromium not installed)',
+    }));
+  } catch (err) {
+    console.log(JSON.stringify({ error: err.message, url, success: false, note: 'Curl fallback failed' }));
+  }
+  process.exit(0);
+}
+
+// Chromium is available — use Playwright as normal
 try {
   const browser = await chromium.launch({
     executablePath: '/usr/bin/chromium',

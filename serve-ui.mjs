@@ -18,8 +18,7 @@ const ALLOWED_COMMANDS = new Set([
   'free', 'uptime', 'id', 'env', 'printenv', 'ping', 'wget',
   'npm', 'node', 'npx', 'tsc', 'git',
   'Telegram', 'kitty', 'haruna', 'nautilus',
-  'chromium',
-  'browser-control',
+  'chromium', 'xdg-open',
 ]);
 
 const BLOCKED = ['sudo', 'su ', 'passwd', 'dd ', 'mkfs', 'chown', 'chgrp', 'shutdown', 'reboot'];

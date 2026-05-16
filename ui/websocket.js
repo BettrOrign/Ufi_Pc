@@ -89,27 +89,6 @@ function handleServerMessage(msg) {
           console.log('[WS] showImage:', source);
           addImageMessage(source);
           result = { result: 'Image displayed: ' + source };
-        } else if (fc.name === 'browserControl') {
-          const { action, url, selector, text, direction, amount, ms } = fc.args;
-          console.log('[WS] browserControl:', action);
-          let args;
-          switch (action) {
-            case 'open': args = [url]; break;
-            case 'click': args = [selector]; break;
-            case 'type': args = [selector, text || '']; break;
-            case 'scroll': args = [direction || 'down', String(amount || 400)]; break;
-            case 'extract': args = []; break;
-            case 'wait': args = [String(ms || 1000)]; break;
-            case 'close': args = []; break;
-            default: args = [];
-          }
-          const resp = await fetch('/api/exec', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: 'node', args: ['browser-control.mjs', action, ...args] }),
-          });
-          const data = await resp.json();
-          result = { result: data.stdout || data.error, error: data.error };
         } else {
           const { command, args, background } = fc.args;
           console.log('[WS] systemCommand:', command, (args || []).join(' '));
