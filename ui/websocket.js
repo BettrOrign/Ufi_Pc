@@ -2,8 +2,9 @@ import { dom } from './dom.js';
 import { state } from './state.js';
 import { config, getSettings, GEMINI_TOOLS } from './config.js';
 import { setStatus, showError, scrollToBottom } from './ui-helpers.js';
-import { addMessage, addThinking, removeThinking, addToolMessage } from './chat.js';
+import { addMessage, addThinking, removeThinking, addToolMessage, addImageMessage } from './chat.js';
 import { playAudio } from './audio-playback.js';
+import { startScreenShare, stopScreenShare } from './screen-capture.js';
 
 async function execTool(command, args, background) {
   const resp = await fetch('/api/exec', {
@@ -12,8 +13,6 @@ async function execTool(command, args, background) {
     body: JSON.stringify({ command, args: args || [], background: background || false }),
   });
   const data = await resp.json();
-  const cmdStr = command + (args?.length ? ' ' + args.join(' ') : '');
-  addToolMessage(cmdStr, data.stdout, data.stderr, data.exitCode);
   return data;
 }
 
@@ -65,17 +64,63 @@ function handleServerMessage(msg) {
     Promise.all(msg.toolCall.functionCalls.map(async (fc) => {
       let result;
       try {
-        const { command, args, background } = fc.args;
-        console.log('[WS] systemCommand:', command, (args || []).join(' '));
-        const resp = await fetch('/api/exec', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command, args: args || [], background: background || false }),
-        });
-        const data = await resp.json();
-        const cmdStr = command + (args?.length ? ' ' + args.join(' ') : '');
-        addToolMessage(cmdStr, data.stdout, data.stderr, data.exitCode);
-        result = { stdout: data.stdout, stderr: data.stderr, exitCode: data.exitCode, error: data.error };
+        if (fc.name === 'toggleScreenShare') {
+          const { action } = fc.args;
+          console.log('[WS] toggleScreenShare:', action);
+          let res;
+          if (action === 'start') {
+            res = await startScreenShare();
+          } else {
+            res = stopScreenShare();
+          }
+          result = { result: res.message, error: res.success ? undefined : res.message };
+        } else if (fc.name === 'mastraAgent') {
+          const { agentId, task } = fc.args;
+          console.log('[WS] mastraAgent:', agentId, task);
+          const resp = await fetch('/api/mastra/agent/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId, task }),
+          });
+          const data = await resp.json();
+          result = { result: data.result || data.error, error: data.error };
+        } else if (fc.name === 'showImage') {
+          const { source } = fc.args;
+          console.log('[WS] showImage:', source);
+          addImageMessage(source);
+          result = { result: 'Image displayed: ' + source };
+        } else if (fc.name === 'browserControl') {
+          const { action, url, selector, text, direction, amount, ms } = fc.args;
+          console.log('[WS] browserControl:', action);
+          let args;
+          switch (action) {
+            case 'open': args = [url]; break;
+            case 'click': args = [selector]; break;
+            case 'type': args = [selector, text || '']; break;
+            case 'scroll': args = [direction || 'down', String(amount || 400)]; break;
+            case 'extract': args = []; break;
+            case 'wait': args = [String(ms || 1000)]; break;
+            case 'close': args = []; break;
+            default: args = [];
+          }
+          const resp = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: 'node', args: ['browser-control.mjs', action, ...args] }),
+          });
+          const data = await resp.json();
+          result = { result: data.stdout || data.error, error: data.error };
+        } else {
+          const { command, args, background } = fc.args;
+          console.log('[WS] systemCommand:', command, (args || []).join(' '));
+          const resp = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command, args: args || [], background: background || false }),
+          });
+          const data = await resp.json();
+          result = { stdout: data.stdout, stderr: data.stderr, exitCode: data.exitCode, error: data.error };
+        }
       } catch (err) {
         result = { error: err.message };
       }

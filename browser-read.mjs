@@ -11,10 +11,51 @@ try {
   const browser = await chromium.launch({
     executablePath: '/usr/bin/chromium',
     headless: true,
-    args: ['--no-sandbox','--disable-gpu','--disable-dev-shm-usage'],
+    args: [
+      '--no-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
   });
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    locale: 'en-US',
+    timezoneId: 'America/New_York',
+  });
+
+  const page = await context.newPage();
+
+  // Hide automation traces
+  await page.addInitScript(() => {
+    // Remove webdriver property
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    // Fake chrome object
+    window.chrome = {
+      runtime: {},
+      loadTimes: function() {},
+      csi: function() {},
+      app: {},
+    };
+    // Override permissions
+    const originalQuery = navigator.permissions.query;
+    navigator.permissions.query = (params) => (
+      params.name === 'notifications'
+        ? Promise.resolve({ state: 'denied' })
+        : originalQuery(params)
+    );
+    // Add plugins array
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [1, 2, 3, 4, 5],
+    });
+    // Add languages
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en'],
+    });
+  });
+
+  await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
 
   const title = await page.title();
   const text = await page.innerText('body');

@@ -4,6 +4,9 @@ import { scrollToBottom } from './ui-helpers.js';
 
 export function addMessage(role, text) {
   if (dom.welcomeMsg) dom.welcomeMsg.remove();
+  while (dom.chatContainer.children.length > 50) {
+    dom.chatContainer.removeChild(dom.chatContainer.firstChild);
+  }
   const div = document.createElement('div');
   div.className = 'message ' + role;
   const label = document.createElement('div');
@@ -39,6 +42,9 @@ export function addThinking() {
 
 export function addToolMessage(cmd, stdout, stderr, exitCode) {
   if (dom.welcomeMsg) dom.welcomeMsg.remove();
+  while (dom.chatContainer.children.length > 50) {
+    dom.chatContainer.removeChild(dom.chatContainer.firstChild);
+  }
   const div = document.createElement('div');
   div.className = 'message tool';
   const label = document.createElement('div');
@@ -62,6 +68,57 @@ export function addToolMessage(cmd, stdout, stderr, exitCode) {
   scrollToBottom();
 }
 
+export function addImageMessage(source) {
+  if (dom.welcomeMsg) dom.welcomeMsg.remove();
+  while (dom.chatContainer.children.length > 50) {
+    dom.chatContainer.removeChild(dom.chatContainer.firstChild);
+  }
+  const div = document.createElement('div');
+  div.className = 'message media-msg';
+
+  // YouTube video → iframe
+  const ytMatch = source.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+  if (ytMatch) {
+    const vid = ytMatch[1];
+    div.innerHTML = `<div class="video-wrapper"><iframe src="https://www.youtube.com/embed/${vid}" frameborder="0" allowfullscreen></iframe></div>`;
+    const srcLabel = document.createElement('div');
+    srcLabel.className = 'media-source';
+    srcLabel.textContent = '📺 YouTube: ' + source;
+    div.appendChild(srcLabel);
+    dom.chatContainer.appendChild(div);
+    dom.chatContainer.style.display = 'flex';
+    scrollToBottom();
+    return;
+  }
+
+  // Regular image — proxy through server to avoid CSP
+  const imgSrc = source.startsWith('http')
+    ? '/api/image-proxy?url=' + encodeURIComponent(source)
+    : '/api/image?path=' + encodeURIComponent(source);
+
+  const img = document.createElement('img');
+  img.className = 'chat-image';
+  img.src = imgSrc;
+  img.alt = 'Image';
+  img.loading = 'lazy';
+
+  img.onerror = () => {
+    div.className = 'message media-msg error';
+    div.textContent = '❌ Image: ' + source;
+  };
+  div.appendChild(img);
+
+  // Source label
+  const srcLabel = document.createElement('div');
+  srcLabel.className = 'media-source';
+  srcLabel.textContent = '📷 ' + source;
+  div.appendChild(srcLabel);
+
+  dom.chatContainer.appendChild(div);
+  dom.chatContainer.style.display = 'flex';
+  scrollToBottom();
+}
+
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -69,6 +126,16 @@ function escapeHtml(s) {
 export function removeThinking() {
   const el = document.getElementById('thinkingIndicator');
   if (el) el.remove();
+}
+
+export function addStatusMsg(text) {
+  if (dom.welcomeMsg) dom.welcomeMsg.remove();
+  const div = document.createElement('div');
+  div.className = 'message status-msg';
+  div.textContent = text;
+  dom.chatContainer.appendChild(div);
+  dom.chatContainer.style.display = 'flex';
+  scrollToBottom();
 }
 
 export async function sendTextMessage(text) {
