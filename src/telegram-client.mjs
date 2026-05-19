@@ -196,7 +196,8 @@ async function sendToChat(chatIdentifier, text) {
 }
 
 /**
- * Search Telegram contacts by name, username, or phone.
+ * Search ONLY the user's Telegram contacts by name, username, or phone.
+ * Does NOT search globally — only returns users from the contact list.
  * @param {string} query - Search query (name, username, or phone)
  * @param {number} limit - Max results (default 10)
  * @returns {Array} Array of { id, firstName, lastName, username, phone }
@@ -213,8 +214,9 @@ async function searchContacts(query, limit = 10) {
   const contacts = [];
   if (result.users && result.users.length > 0) {
     result.users.forEach(u => {
-      // Skip if it's the current user
+      // Skip if it's the current user or not in my contacts list
       if (u.isSelf) return;
+      if (!u.contact) return; // Only show MY contacts, not global search results
       contacts.push({
         id: u.id?.toString(),
         firstName: u.firstName || '',
