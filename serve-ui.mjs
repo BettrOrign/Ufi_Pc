@@ -18,7 +18,6 @@ const ALLOWED_COMMANDS = new Set([
   'free', 'uptime', 'id', 'env', 'printenv', 'ping', 'wget',
   'npm', 'node', 'npx', 'tsc', 'git',
   'Telegram', 'kitty', 'haruna', 'nautilus',
-  'chromium', 'xdg-open',
 ]);
 
 const BLOCKED = ['sudo', 'su ', 'passwd', 'dd ', 'mkfs', 'chown', 'chgrp', 'shutdown', 'reboot'];
@@ -56,6 +55,40 @@ function runCommand(cmd, args) {
     child.on('close', (exitCode) => resolve({ stdout, stderr, exitCode: exitCode ?? -1 }));
     child.on('error', (err) => resolve({ stdout: '', stderr: err.message, exitCode: -1 }));
   });
+}
+
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      // Success — return immediately
+      if (response.ok) return response;
+      // Rate limit (429) or upstream error (502) — retry with backoff
+      if (response.status === 429 || response.status === 502) {
+        lastError = `HTTP ${response.status}`;
+        const retryAfter = response.headers.get('retry-after');
+        const delay = retryAfter
+          ? parseInt(retryAfter) * 1000
+          : Math.min(1000 * Math.pow(2, attempt), 10000);
+        console.log(`[Retry] Attempt ${attempt + 1}/${maxRetries} got ${response.status}, waiting ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      // Non-retryable error — return as-is
+      return response;
+    } catch (err) {
+      lastError = err.message;
+      if (attempt < maxRetries - 1) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        console.log(`[Retry] Attempt ${attempt + 1}/${maxRetries} error: ${err.message}, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`Request failed after ${maxRetries} retries. Last error: ${lastError}`);
 }
 
 const MIME = {
@@ -140,7 +173,91 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // 🧠 Mastra Agent proxy — call Mastra agents from Gemini
+    // ⚡ Fast Path — Intent Router (bypass LLM for known commands)
+    if (url.pathname === '/api/intent/route' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const { text } = JSON.parse(body);
+          if (!text) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing text' }));
+            return;
+          }
+
+          const { detectIntent } = await import('./src/intent-router.mjs');
+          const intent = detectIntent(text);
+
+          if (!intent) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ matched: false }));
+            return;
+          }
+
+          console.log(`[IntentRouter] Matched: ${intent.type} →`, JSON.stringify(intent));
+
+          let result;
+
+          switch (intent.type) {
+            case 'browse': {
+              const { goto } = await import('./src/browser-fast.mjs');
+              result = await goto(intent.url);
+              break;
+            }
+            case 'youtube': {
+              const { youtubeSearch } = await import('./src/browser-fast.mjs');
+              result = await youtubeSearch(intent.query);
+              break;
+            }
+            case 'weather': {
+              const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(intent.city)}&units=metric&appid=${process.env.OPENWEATHER_API_KEY || ''}`;
+              try {
+                const resp = await fetch(apiUrl);
+                const data = await resp.json();
+                if (data.main) {
+                  result = { success: true, message: `В ${intent.city} сейчас ${Math.round(data.main.temp)}°C, ${data.weather[0].description}` };
+                } else {
+                  result = { success: false, message: `Не удалось получить погоду для ${intent.city}` };
+                }
+              } catch (e) {
+                result = { success: false, message: `Ошибка получения погоды: ${e.message}` };
+              }
+              break;
+            }
+            case 'launch': {
+              const { spawn } = await import('node:child_process');
+              try {
+                const child = spawn(intent.app, [], { detached: true, stdio: 'ignore' });
+                child.unref();
+                result = { success: true, message: `Запущен ${intent.app}` };
+              } catch (e) {
+                result = { success: false, message: `Не удалось запустить ${intent.app}: ${e.message}` };
+              }
+              break;
+            }
+            case 'search': {
+              const { search } = await import('./src/browser-fast.mjs');
+              result = await search(intent.query);
+              break;
+            }
+            default:
+              result = { success: false, message: 'Unknown intent type' };
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ matched: true, intent, result }));
+          console.log(`[IntentRouter] Result:`, JSON.stringify(result).slice(0, 200));
+        } catch (err) {
+          console.error('[IntentRouter] Error:', err.message);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // 🧠 Mastra Agent proxy — call Mastra agents from Gemini (with Fast Path)
     if (url.pathname === '/api/mastra/agent/generate' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk) => { body += chunk; });
@@ -153,12 +270,79 @@ const server = createServer(async (req, res) => {
             return;
           }
 
-          const mastraRes = await fetch(`http://localhost:4111/api/agents/${agentId}/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [{ role: 'user', content: task }] }),
-            signal: AbortSignal.timeout(30000),
-          });
+          // ⚡ Try fast path first — Intent Router
+          const { detectIntent } = await import('./src/intent-router.mjs');
+          const intent = detectIntent(task);
+
+          if (intent) {
+            console.log(`[FastPath] "${task}" → ${intent.type}`, JSON.stringify(intent));
+
+            let result;
+
+            switch (intent.type) {
+              case 'browse': {
+                const { goto } = await import('./src/browser-fast.mjs');
+                result = await goto(intent.url);
+                break;
+              }
+              case 'youtube': {
+                const { youtubeSearch } = await import('./src/browser-fast.mjs');
+                result = await youtubeSearch(intent.query);
+                break;
+              }
+              case 'weather': {
+                const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(intent.city)}&units=metric&appid=${process.env.OPENWEATHER_API_KEY || ''}`;
+                try {
+                  const resp = await fetch(apiUrl);
+                  const data = await resp.json();
+                  if (data.main) {
+                    result = { success: true, message: `В ${intent.city} сейчас ${Math.round(data.main.temp)}°C, ${data.weather[0].description}` };
+                  } else {
+                    result = { success: false, message: `Не удалось получить погоду для ${intent.city}` };
+                  }
+                } catch (e) {
+                  result = { success: false, message: `Ошибка погоды: ${e.message}` };
+                }
+                break;
+              }
+              case 'launch': {
+                const { spawn } = await import('node:child_process');
+                try {
+                  const child = spawn(intent.app, [], { detached: true, stdio: 'ignore' });
+                  child.unref();
+                  result = { success: true, message: `Запущен ${intent.app}` };
+                } catch (e) {
+                  result = { success: false, message: `Ошибка запуска: ${e.message}` };
+                }
+                break;
+              }
+              case 'search': {
+                const { search } = await import('./src/browser-fast.mjs');
+                result = await search(intent.query);
+                break;
+              }
+              default:
+                result = { success: false, message: 'Unknown intent' };
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ result: result.message, fastPath: true, intent: intent.type }));
+            console.log(`[FastPath] Result:`, result.message?.slice(0, 100));
+            return;
+          }
+
+          // 🐢 Slow path — forward to Mastra agent
+          console.log(`[SlowPath] "${task}" → Mastra ${agentId}`);
+          const mastraRes = await fetchWithRetry(
+            `http://localhost:4111/api/agents/${agentId}/generate`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: [{ role: 'user', content: task }], maxSteps: 20 }),
+              signal: AbortSignal.timeout(30000),
+            },
+            3
+          );
 
           if (!mastraRes.ok) {
             const errText = await mastraRes.text();
@@ -169,7 +353,7 @@ const server = createServer(async (req, res) => {
 
           const data = await mastraRes.json();
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ result: data.text || data }));
+          res.end(JSON.stringify({ result: data.text || data, fastPath: false }));
         } catch (err) {
           res.writeHead(502, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Mastra agent error: ' + (err.message || err) }));

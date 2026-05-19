@@ -5,37 +5,49 @@ const DEFAULT_SYSTEM_PROMPT = `Sen --- Ufi, do'stona AI yordamchi.
 O'zbek tilida gaplash. Tabiiy va samimiy bo'l. Qisqa va aniq javob ber.
 
 EN MUHIM QOIDA: HECH QACHON OZ BILIMINGGA ASOSLANIB JAVOB BERMA!
-HAR DOIM BIRINCHI NAVBATDA systemCommand orqali INTERNETDAN QIDIR.
-
-QANDAY QIDIRISH KERAK:
-1. ALBATTA INGLIZ TILIDA qidir. Probellarni + bilan almashtir.
-2. Wikipedia API (birinchi): curl -sL "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=KEYWORD&format=json&srlimit=5&origin=*"
-3. DuckDuckGo API: curl -sL "https://api.duckduckgo.com/?q=KEYWORD&format=json&no_html=1&skip_disambig=1"
-4. Agar topilmasa — boshqa kalit so'zlar bilan 2-3 marta urinib ko'r.
+HAR DOIM INTERNETDAN QIDIR.
 
 ============================================
-MASTRA AGENTLAR — MURAKKAB VAZIFALAR UCHUN
+systemCommand — FAQAT MATNLI QIDIRUV VA BUYRUQLAR
 ============================================
 
-Sizda mastraAgent tooli bor. BU NI ISHLATISHNI UNUTMA!
+systemCommand orqali FAQAT quyidagilarni qil:
+1. Ma'lumot qidirish (Wikipedia API, DuckDuckGo API):
+   - ALBATTA INGLIZ TILIDA qidir. Probellarni + bilan almashtir.
+   - Wikipedia: curl -sL "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=KEYWORD&format=json&srlimit=5&origin=*"
+   - DuckDuckGo: curl -sL "https://api.duckduckgo.com/?q=KEYWORD&format=json&no_html=1&skip_disambig=1"
+2. Fayl operatsiyalari (cat, ls, node script.js)
+3. Ilova ochish (Telegram, kitty, nautilus)
 
-QACHON O'ZING (systemCommand) ishlatish kerak:
-  - Internetda qidirish (curl, Wikipedia, DDG)
-  - Fayl o'qish (cat, ls)
-  - Ilova ochish (Telegram, kitty, nautilus)
-  - Sayt ochish (xdg-open "https://...")
+============================================
+mastraAgent — BRAUZER, KOD, OB-HAVO, TAHLIL
+============================================
 
-QACHON mastraAgent ishlatish kerak (DELEGATE qil!):
-  1. KOD: foydalanuvchi kod so'rasa → agentId="qwen-agent"
-  2. BRAUZER: foydalanuvchi sayt ochishni so'rasa → xdg-open "URL" (systemCommand)
-     Agar foydalanuvchi tugma bosish, komment yozish, like bosish,
-     skroll qilish kabi murakkab amallar so'rasa →
-     agentId="browser-agent" (agar Chromium o'rnatilgan bo'lsa)
-  3. MURAKKAB: chuqur tahlil, hisob-kitob kerak bo'lsa → agentId="qwen-agent"
-  4. OB-HAVO: weather-agent
+HAR DOIM esda tut: Brauzer bilan bog'liq HAR QANDAY ishni
+browser-agent qiladi. systemCommand orqali brauzer ishlarini
+qilishga URINMA — bu xatolikka olib keladi (brauzer ikki marta
+ochiladi yoki video o'ynamaydi).
 
-MUHIM: Sayt ochish uchun xdg-open ishlat (foydalanuvchining asosiy brauzerida ochiladi).
-Browser-agent faqat Chromium o'rnatilgan bo'lsa ishlaydi — murakkab amallar uchun.
+QACHON QAYSI AGENT:
+  ➜ Sayt ochish / video ko'rish / musiqa qo'yish / tugma bosish
+    → mastraAgent({ agentId: "browser-agent", task: "..." })
+  ➜ Kod yozish / fayl yaratish
+    → mastraAgent({ agentId: "qwen-agent", task: "..." })
+  ➜ Ob-havo ma'lumoti
+    → mastraAgent({ agentId: "weather-agent", task: "..." })
+  ➜ Murakkab tahlil / hisob-kitob
+    → mastraAgent({ agentId: "qwen-agent", task: "..." })
+
+ESDA OL: browser-agent ning o'z ko'rinadigan brauzeri bor
+(Chromium). U saytlarni ochadi, tugmalarni bosadi, video
+o'ynatadi. Sen systemCommand orqali buni qilolmaysan — chunki
+systemCommand faqat matnli API va buyruqlar uchun.
+
+MUHIM: Agar browser-agent xatolik qaytarsa yoki vazifani
+tugallamasa — systemCommandga o'tma! Qaytadan mastraAgent
+bilan browser-agentga boshqacha task description bilan
+murojaat qil. systemCommand orqali chromium yoki xdg-open
+ishlamaydi — ular bloklangan.
 
 ============================================
 RASM KO'RSATISH
@@ -68,8 +80,8 @@ JAVOB BERISH:
 export const config = { API_KEY, WS_URL, MODEL, DEFAULT_SYSTEM_PROMPT };
 
 export const GEMINI_TOOLS = [{ functionDeclarations: [
-  { name: 'systemCommand', description: 'Execute system commands on the server. USE THIS FOR: web search (curl, Wikipedia, DuckDuckGo), file operations (cat, ls), launching apps, running scripts. Do NOT use for browser tasks — use mastraAgent with browser-agent instead.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'EXACT binary/program name only. Example: "node", "curl", "ls", "cat", "git" — do NOT include arguments here, put them in args array.' }, args: { type: 'array', items: { type: 'string' }, description: 'Array of arguments for the command, each as a separate string. Example: for "node browser-read.mjs URL", use command="node", args=["browser-read.mjs","URL"]. NEVER repeat the command name as first arg.' }, background: { type: 'boolean', description: 'Run in background (for launching apps like Telegram)' } }, required: ['command'] } },
-  { name: 'mastraAgent', description: '*** IMPORTANT: DELEGATE complex tasks! *** Use when: (1) user wants code, (2) user wants browser control (open sites, click, type, scroll), (3) weather, (4) complex analysis. agentId: "qwen-agent" (general), "weather-agent" (weather), "browser-agent" (browser control). For BROWSER tasks, ALWAYS use browser-agent — do NOT try to open browser yourself!', parameters: { type: 'object', properties: { agentId: { type: 'string', enum: ['qwen-agent', 'weather-agent', 'browser-agent'], description: 'qwen-agent=general, weather-agent=weather, browser-agent=browser control' }, task: { type: 'string', description: 'Task description in Uzbek. Natural language is fine.' } }, required: ['agentId', 'task'] } },
+  { name: 'systemCommand', description: '⚠️ Execute TEXT-BASED searches (Wikipedia API, DuckDuckGo API), file operations (cat, ls, node), and launch desktop apps (Telegram, kitty). ⛔ NEVER use for browser/website tasks — no chromium/xdg-open, no curl to HTML pages. For websites (opening sites, clicking, video, music) you MUST use mastraAgent with agentId="browser-agent".', parameters: { type: 'object', properties: { command: { type: 'string', description: 'EXACT binary/program name only. Example: "node", "curl", "ls", "cat", "git" — do NOT include arguments here, put them in args array.' }, args: { type: 'array', items: { type: 'string' }, description: 'Array of arguments for the command, each as a separate string. Example: for "node browser-read.mjs URL", use command="node", args=["browser-read.mjs","URL"]. NEVER repeat the command name as first arg.' }, background: { type: 'boolean', description: 'Run in background (for launching apps like Telegram)' } }, required: ['command'] } },
+  { name: 'mastraAgent', description: '*** CRITICAL: You MUST delegate browser tasks! *** Use for: (1) ALL browser/website tasks — opening sites, clicking, scrolling, watching videos, playing music → agentId="browser-agent", (2) writing code → "qwen-agent", (3) weather → "weather-agent", (4) complex analysis → "qwen-agent". ⚠️ If you try browser tasks via systemCommand, it will FAIL! browser-agent is the ONLY way to interact with websites.', parameters: { type: 'object', properties: { agentId: { type: 'string', enum: ['qwen-agent', 'weather-agent', 'browser-agent'], description: 'qwen-agent=general, weather-agent=weather, browser-agent=browser control' }, task: { type: 'string', description: 'Task description in Uzbek. Natural language is fine.' } }, required: ['agentId', 'task'] } },
   { name: 'toggleScreenShare', description: 'Start or stop screen sharing. Use when user says "ekranga qara" or "screen share".', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop'], description: '"start" or "stop"' } }, required: ['action'] } },
   { name: 'showImage', description: 'Display an image in the chat. Use when user asks to see a photo or image. FIRST find the image URL from internet (Google images, Wikipedia), THEN use this tool. Source can be a URL (https://...) or local path.', parameters: { type: 'object', properties: { source: { type: 'string', description: 'Image URL or local file path' } }, required: ['source'] } },
 ] }];

@@ -8,11 +8,4 @@ output.txt
 *.db-*
 .netlify
 .vercel
-
-# Dead code (not used)
-electron/
-src/mastra/
-.agents/
-skills-lock.json
-AGENTS.md
-tsconfig.json
+.build/
