@@ -6,8 +6,24 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const __env = existsSync('.env') ? Object.fromEntries(readFileSync('.env','utf-8').split('\n').filter(l=>l.trim()).map(l=>l.split('=').map(s=>s.trim()))) : {};
-const GEMINI_API_KEY = __env.GEMINI_API_KEY || '';
+// Load .env into process.env
+if (existsSync('.env')) {
+  const envContent = readFileSync('.env', 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex > 0) {
+        const key = trimmed.slice(0, eqIndex).trim();
+        const value = trimmed.slice(eqIndex + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+}
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const uiDir = join(__dirname, 'ui');
 const PORT = 3000;
 
@@ -241,6 +257,21 @@ const server = createServer(async (req, res) => {
               result = await search(intent.query);
               break;
             }
+            case 'telegram_send': {
+              const lowerRaw = (intent.raw || '').toLowerCase();
+              if (lowerRaw.includes('избранные')) {
+                try {
+                  const { sendToSavedMessages } = await import('./src/telegram-client.mjs');
+                  const r = await sendToSavedMessages(intent.text);
+                  result = { success: true, message: 'Сообщение отправлено в Избранные ✅' };
+                } catch (e) {
+                  result = { success: false, message: 'Ошибка Telegram: ' + e.message };
+                }
+              } else {
+                result = { success: false, message: 'Для отправки контактам используйте голосовой ассистент' };
+              }
+              break;
+            }
             default:
               result = { success: false, message: 'Unknown intent type' };
           }
@@ -270,9 +301,18 @@ const server = createServer(async (req, res) => {
             return;
           }
 
-          // ⚡ Try fast path first — Intent Router
+          // ⚡ Fast Path — Intent Router
           const { detectIntent } = await import('./src/intent-router.mjs');
-          const intent = detectIntent(task);
+          let intent = detectIntent(task);
+
+          // For telegram_send to contacts (not "избранные"), skip fast path and let Mastra Agent handle it
+          if (intent && intent.type === 'telegram_send') {
+            const lowerRaw = (intent.raw || '').toLowerCase();
+            if (!lowerRaw.includes('избранные') && !lowerRaw.includes(' me') && lowerRaw !== 'me') {
+              console.log(`[FastPath] telegram_send to contact, falling through to slow path`);
+              intent = null; // Force slow path
+            }
+          }
 
           if (intent) {
             console.log(`[FastPath] "${task}" → ${intent.type}`, JSON.stringify(intent));
@@ -321,12 +361,22 @@ const server = createServer(async (req, res) => {
                 result = await search(intent.query);
                 break;
               }
+              case 'telegram_send': {
+                try {
+                  const { sendToSavedMessages } = await import('./src/telegram-client.mjs');
+                  const r = await sendToSavedMessages(intent.text);
+                  result = { success: true, message: 'Сообщение отправлено в Избранные ✅' };
+                } catch (e) {
+                  result = { success: false, message: 'Ошибка Telegram: ' + e.message };
+                }
+                break;
+              }
               default:
                 result = { success: false, message: 'Unknown intent' };
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ result: result.message, fastPath: true, intent: intent.type }));
+            res.end(JSON.stringify({ result: result.message, fastPath: true, matched: true, intent: intent.type }));
             console.log(`[FastPath] Result:`, result.message?.slice(0, 100));
             return;
           }

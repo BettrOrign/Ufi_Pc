@@ -28,7 +28,7 @@ export const stagehandAgentTool = createTool({
     try {
       const stagehand = await getStagehand();
       const agent = stagehand.agent({
-        model: "google/gemini-2.0-flash",
+        model: "groq/groq-llama-3.3-70b-versatile",
         systemPrompt:
           "You are a browser assistant. The user gives you tasks like 'go to youtube and play lofi music' or 'find iPhone on ozon'. Complete them naturally using the browser. Report what you did concisely.",
         mode: "dom",

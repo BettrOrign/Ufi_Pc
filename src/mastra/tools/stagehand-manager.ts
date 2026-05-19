@@ -7,9 +7,9 @@ export async function getStagehand(): Promise<Stagehand> {
     return stagehandInstance;
   }
 
-  const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!GOOGLE_API_KEY) {
-    throw new Error("GOOGLE_GENERATIVE_AI_API_KEY environment variable is required for Stagehand");
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY environment variable is required for Stagehand");
   }
 
   stagehandInstance = new Stagehand({
@@ -26,9 +26,9 @@ export async function getStagehand(): Promise<Stagehand> {
       viewport: { width: 1280, height: 800 },
     },
     model: {
-      modelName: "gemini-2.0-flash",
-      provider: "google",
-      apiKey: GOOGLE_API_KEY,
+      modelName: "groq-llama-3.3-70b-versatile",
+      provider: "groq",
+      apiKey: GROQ_API_KEY,
     },
     verbose: 0,
     domSettleTimeout: 3000,

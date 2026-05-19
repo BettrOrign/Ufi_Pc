@@ -26,6 +26,19 @@ const MEDIA_KEYWORDS = [
   'playlist', 'radio',
 ];
 
+const TELEGRAM_SEND_KEYWORDS = [
+  'отправ', 'отправит', 'отправь', 'отправьте', 'отправляй', 'отправляет',
+  'напиши', 'напишите', 'напишешь', 'написал', 'написать',
+  'сообщени', 'сообщение', 'сообщения',
+  'send', 'sending', 'sent',
+  'message', 'messages',
+];
+
+const TELEGRAM_KEYWORDS = [
+  'телеграм', 'телеграме', 'телеграма', 'телеграмм',
+  'telegram', 'tg',
+];
+
 const WEATHER_KEYWORDS = [
   'погод', 'температур', 'осадк', 'дожд', 'снег', 'ветр',
   'weather', 'temperature', 'rain', 'snow', 'wind',
@@ -59,6 +72,9 @@ const NOISE_WORDS = new Set([
   'скажи', 'расскажи',
   'давай', 'давайте', 'дай',
   'хочу', 'хотел', 'хотела', 'хотелось', 'хочешь', 'хотите',
+  // Telegram send verbs
+  'отправь', 'отправ', 'отправьте', 'отправляй', 'отправить',
+  'напиши', 'напишите', 'напишешь', 'написать',
   // Media words
   'музыку', 'музыка', 'музыки', 'музыкой', 'музыке', 'музык',
   'песню', 'песня', 'песни', 'песней', 'песне', 'песен',
@@ -83,6 +99,8 @@ const NOISE_WORDS = new Set([
   'перед', 'после', 'около', 'возле', 'мимо', 'кроме',
   'и', 'а', 'но', 'да', 'или', 'что', 'чтобы', 'как',
   'под', 'названием', 'имени', 'имя', 'про',
+  // Saved Messages
+  'избранные', 'избранн',
   // Politeness
   'пожалуйста', 'плиз', 'спасибо', 'будь', 'добра',
   'please', 'thank', 'thanks',
@@ -112,6 +130,8 @@ const NOISE_WORDS = new Set([
   'and', 'or', 'of', 'is', 'are', 'was', 'were',
   'please', 'some', 'any', 'this', 'that', 'these', 'those',
   'me', 'my', 'i', 'we', 'you', 'your',
+  // Telegram platform
+  'телеграм', 'телеграме', 'телеграма', 'телеграмм',
 ]);
 
 // ─── Site aliases (browse intent) ───────────────────────
@@ -131,8 +151,6 @@ const SITE_ALIASES = {
   'почта': 'mail.google.com',
   'вк': 'vk.com',
   'vk': 'vk.com',
-  'телеграм': 'web.telegram.org',
-  'telegram': 'web.telegram.org',
   'reddit': 'reddit.com',
   'редит': 'reddit.com',
   'озон': 'ozon.ru',
@@ -186,9 +204,31 @@ function getMatchingKeywords(keywords, lowerText) {
 }
 
 function extractQuery(text) {
+  // Step 1: If text has quoted content, extract the first quoted string as the query
+  // e.g., "Montagem Debado" nomli musiqani topib ijro eting → "Montagem Debado"
+  const quoteMatch = text.match(/["""'']["']?([^""''"]+)["""''"]["']?/);
+  if (quoteMatch && quoteMatch[1].trim()) {
+    return quoteMatch[1].trim();
+  }
+  
+  // Step 2: Remove punctuation (but keep apostrophes for words like qo'shig'ini)
   const cleaned = text.replace(/[,!?.;:()[\]{}"«»@#$%^&*+=~`]+/g, ' ').trim();
   const words = cleaned.split(/\s+/);
-  const filtered = words.filter(w => !NOISE_WORDS.has(w.toLowerCase()));
+  
+  // Step 3: Filter words - remove exact noise word matches AND
+  // words that CONTAIN a noise word as substring (e.g., "YouTubeda" contains "youtube")
+  const filtered = words.filter(w => {
+    const lower = w.toLowerCase();
+    // Exact match check
+    if (NOISE_WORDS.has(lower)) return false;
+    // Substring check: if word contains any noise word that's 4+ chars
+    // This catches "YouTubeda" → "youtube" is in NOISE_WORDS
+    for (const nw of NOISE_WORDS) {
+      if (nw.length >= 4 && lower.includes(nw)) return false;
+    }
+    return true;
+  });
+  
   const query = filtered.join(' ').trim();
   return query || text; // fallback to original
 }
@@ -263,6 +303,33 @@ export function detectIntent(text) {
     return { type: 'youtube', query: query || trimmed };
   }
   
+  // 4.5. Telegram send
+  const hasSendKeywords = hasAnyKeyword(TELEGRAM_SEND_KEYWORDS, lower);
+  const hasTelegramKeywords = hasAnyKeyword(TELEGRAM_KEYWORDS, lower);
+  const hasIzbrannye = lower.includes('избранные');
+
+  // Trigger: (send keywords + telegram keywords) OR (send keywords + "избранные") OR ("избранные" + telegram keywords)
+  if ((hasSendKeywords && (hasTelegramKeywords || hasIzbrannye)) || (hasIzbrannye && hasTelegramKeywords)) {
+    const query = extractQuery(trimmed);
+    return { type: 'telegram_send', text: query || trimmed, raw: trimmed };
+  }
+  // 4.6. Telegram search — fall through to LLM (no browse)
+  if (hasAnyKeyword(TELEGRAM_KEYWORDS, lower)) {
+    const searchVerbs = getMatchingKeywords(SEARCH_VERBS, lower);
+    if (searchVerbs.length > 0) {
+      return null;
+    }
+    // "открой телеграм" etc with no send/search — check for launch
+    if (/(?:открой|открывай|открыть)/i.test(lower)) {
+      // Try to launch Telegram app
+      const launchQuery = extractQuery(trimmed).toLowerCase().trim();
+      if (launchQuery) {
+        const app = APP_ALIASES[launchQuery];
+        if (app) return { type: 'launch', app };
+      }
+    }
+  }
+
   // 5. Browse by site name
   for (const [alias, url] of Object.entries(SITE_ALIASES)) {
     if (lower.includes(alias)) {

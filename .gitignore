@@ -9,3 +9,6 @@ output.txt
 .netlify
 .vercel
 .build/
+
+# Telegram session
+.telegram-session
