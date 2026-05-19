@@ -19,8 +19,37 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Auto-load .env file into process.env (Mastra/serve-ui may not do this automatically)
-const __envPath = path.resolve(__dirname, '..', '.env');
+/**
+ * Find the project root directory by looking for .env file.
+ * Checks multiple candidate paths because __dirname changes when compiled by Mastra:
+ * - Source: __dirname = src/ → ../.env = project root ✅
+ * - Compiled: __dirname = .mastra/output/ → ../.env = .mastra/ ❌
+ * So we try multiple locations.
+ */
+function findProjectRoot() {
+  // Order of preference: direct candidates first, then try going up
+  const candidates = [
+    process.cwd(),                               // Running from project root (dev/build)
+    path.resolve(__dirname, '..'),               // Source: src/ → project root ✅; Compiled: .mastra/output/ → .mastra/ ❌
+    path.resolve(__dirname, '..', '..'),         // Compiled: .mastra/output/../.. → project root ✅
+    __dirname,                                   // Direct fallback
+  ];
+
+  for (const dir of candidates) {
+    const envPath = path.join(dir, '.env');
+    if (fs.existsSync(envPath)) {
+      return dir;
+    }
+  }
+
+  // Last resort: use process.cwd()
+  return process.cwd();
+}
+
+const PROJECT_ROOT = findProjectRoot();
+
+// Load .env from project root into process.env (Mastra/serve-ui may not do this automatically)
+const __envPath = path.join(PROJECT_ROOT, '.env');
 if (fs.existsSync(__envPath)) {
   const envContent = fs.readFileSync(__envPath, 'utf-8');
   for (const line of envContent.split('\n')) {
@@ -38,7 +67,11 @@ if (fs.existsSync(__envPath)) {
   }
 }
 
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+// Log where we found the project root (for debugging)
+if (PROJECT_ROOT !== process.cwd()) {
+  console.log(`[Telegram] Project root: ${PROJECT_ROOT} (cwd: ${process.cwd()})`);
+}
+
 const SESSION_FILE = process.env.TELEGRAM_SESSION_PATH
   || path.join(PROJECT_ROOT, '.telegram-session');
 
@@ -68,7 +101,7 @@ function loadSessionFile() {
   return '';
 }
 
-export function saveSessionFile(sessionString) {
+function saveSessionFile(sessionString) {
   try {
     fs.writeFileSync(SESSION_FILE, sessionString, 'utf-8');
     console.log('Telegram session saved to', SESSION_FILE);
@@ -81,7 +114,7 @@ export function saveSessionFile(sessionString) {
  * Get or create the singleton TelegramClient with saved session.
  * Throws if no session exists (user needs to run telegram-login.mjs first).
  */
-export async function getClient() {
+async function getClient() {
   if (clientInstance && isReady) return clientInstance;
 
   const { apiId, apiHash } = getApiCredentials();
@@ -134,7 +167,7 @@ export async function getClient() {
 /**
  * Send a message to Saved Messages ("Избранные").
  */
-export async function sendToSavedMessages(text) {
+async function sendToSavedMessages(text) {
   const client = await getClient();
   const result = await client.sendMessage('me', {
     message: String(text),
@@ -147,7 +180,7 @@ export async function sendToSavedMessages(text) {
  * @param {string} chatIdentifier - Chat username, phone number, or 'me'/'saved'/'избранные' for Saved Messages
  * @param {string} text - Message text
  */
-export async function sendToChat(chatIdentifier, text) {
+async function sendToChat(chatIdentifier, text) {
   const client = await getClient();
 
   // Normalize Saved Messages identifiers
@@ -168,7 +201,7 @@ export async function sendToChat(chatIdentifier, text) {
  * @param {number} limit - Max results (default 10)
  * @returns {Array} Array of { id, firstName, lastName, username, phone }
  */
-export async function searchContacts(query, limit = 10) {
+async function searchContacts(query, limit = 10) {
   const client = await getClient();
   
   const result = await client.invoke(new Api.contacts.Search({
@@ -202,7 +235,7 @@ export async function searchContacts(query, limit = 10) {
  * @param {string} text - Message text
  * @returns {Object} { success, messageId, contact }
  */
-export async function sendToContactByName(contactName, text) {
+async function sendToContactByName(contactName, text) {
   // Defensive: if "избранные" passed as contact, redirect to saved messages
   const lower = contactName.toLowerCase();
   if (lower === 'me' || lower === 'saved' || lower === 'избранные') {
@@ -244,7 +277,7 @@ export async function sendToContactByName(contactName, text) {
  * Create an unauthenticated TelegramClient for the login flow.
  * Used by telegram-login.mjs.
  */
-export function createClient() {
+function createClient() {
   const { apiId, apiHash } = getApiCredentials();
   const session = new StringSession('');
   return new TelegramClient(session, apiId, apiHash, {
@@ -258,7 +291,7 @@ export function createClient() {
 /**
  * Disconnect and reset the singleton.
  */
-export async function disconnect() {
+async function disconnect() {
   if (clientInstance) {
     try {
       await clientInstance.disconnect();
@@ -271,7 +304,19 @@ export async function disconnect() {
 /**
  * Check if a valid session exists.
  */
-export function hasSession() {
+function hasSession() {
   const sessionString = process.env.TELEGRAM_SESSION || loadSessionFile();
   return !!sessionString;
 }
+
+export {
+  createClient,
+  disconnect,
+  getClient,
+  hasSession,
+  saveSessionFile,
+  searchContacts,
+  sendToChat,
+  sendToContactByName,
+  sendToSavedMessages,
+};
