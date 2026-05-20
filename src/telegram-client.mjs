@@ -304,6 +304,98 @@ async function disconnect() {
 }
 
 /**
+ * Get the most recent messages across all Telegram chats.
+ * Returns one latest message per chat, sorted by date descending.
+ * @param {number} limit - Maximum messages to return (default 10)
+ * @returns {Array} Array of { id, chatId, chatName, from, text, date, unread }
+ */
+export async function getRecentMessages(limit = 10) {
+  const client = await getClient();
+
+  const dialogs = await client.getDialogs({
+    limit: Math.max(limit, 30),
+  });
+
+  const messages = [];
+
+  for (const dialog of dialogs) {
+    if (!dialog.lastMessage) continue;
+
+    const msg = dialog.lastMessage;
+    const chatName = dialog.name || dialog.title || 'Unknown';
+
+    let from = 'Unknown';
+    if (msg.sender) {
+      const s = msg.sender;
+      from = [s.firstName, s.lastName].filter(Boolean).join(' ') || s.username || 'Unknown';
+    }
+
+    messages.push({
+      id: msg.id,
+      chatId: String(dialog.id || ''),
+      chatName,
+      from,
+      text: msg.message || '(media/unsupported)',
+      date: msg.date,
+      unread: (dialog.unreadCount || 0) > 0,
+    });
+  }
+
+  messages.sort((a, b) => b.date - a.date);
+  return messages.slice(0, limit);
+}
+
+/**
+ * Get unread messages from all Telegram chats.
+ * @param {number} limit - Maximum messages to return (default 10)
+ * @returns {Array} Array of { id, chatId, chatName, from, text, date }
+ */
+export async function getUnreadMessages(limit = 10) {
+  const client = await getClient();
+
+  const dialogs = await client.getDialogs({
+    limit: 50,
+  });
+
+  const messages = [];
+
+  for (const dialog of dialogs) {
+    const unreadCount = dialog.unreadCount || 0;
+    if (unreadCount === 0) continue;
+
+    try {
+      const history = await client.getMessages(dialog.id, {
+        limit: Math.min(unreadCount, 5),
+      });
+
+      for (const msg of history) {
+        const chatName = dialog.name || dialog.title || 'Unknown';
+
+        let from = 'Unknown';
+        if (msg.sender) {
+          const s = msg.sender;
+          from = [s.firstName, s.lastName].filter(Boolean).join(' ') || s.username || 'Unknown';
+        }
+
+        messages.push({
+          id: msg.id,
+          chatId: String(dialog.id || ''),
+          chatName,
+          from,
+          text: msg.message || '(media/unsupported)',
+          date: msg.date,
+        });
+      }
+    } catch (err) {
+      console.error(`[Telegram] Failed to get messages from ${dialog.name}:`, err.message);
+    }
+  }
+
+  messages.sort((a, b) => b.date - a.date);
+  return messages.slice(0, limit);
+}
+
+/**
  * Check if a valid session exists.
  */
 function hasSession() {

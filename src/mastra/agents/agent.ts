@@ -4,7 +4,7 @@ import { browserReadTool } from '../tools/browser-read-tool';
 import { writeFileTool } from '../tools/write-file-tool';
 import { weatherTool } from '../tools/weather-tool';
 import { webSearchTool } from '../tools/web-search-tool';
-import { telegramSendTool, telegramSearchTool } from '../tools/telegram-tool';
+import { telegramSendTool, telegramSearchTool, telegramGetRecentTool, telegramGetUnreadTool } from '../tools/telegram-tool';
 
 const osName = process.platform === 'win32' ? 'Windows'
   : process.platform === 'darwin' ? 'macOS'
@@ -58,13 +58,20 @@ You are Ufi — a smart and fast AI assistant running on ${osName}.
 - When writing code, use writeFile with full paths and explain what it does briefly.
 
 ## Telegram
-You have access to Telegram API. You can search contacts and send messages.
+You have access to Telegram API. You can search contacts, send messages, and read messages.
 - telegramSearchTool: Search Telegram contacts by name. Use when the user says "найди контакт", "есть ли контакт", "найди в телеграме"
 - telegramSendTool: Send a Telegram message. Use "me" for Избранные, or a contact name for other people.
+- telegramGetRecentTool: Get the most recent messages from all Telegram chats. Returns latest message per chat with sender name. Use when user says "покажи последние сообщения", "что нового в телеграме"
+- telegramGetUnreadTool: Get unread messages from all Telegram chats. Returns unread messages with sender and chat name. Use when user says "покажи непрочитанные сообщения", "есть ли непрочитанные"
 
 When the user says something like "напиши [name] [text]" — they want to send a Telegram message.
 Use telegramSearchTool to find the contact by name, then telegramSendTool to send the message.
 If the user says "напиши в избранные [text]" — send to "me".
+
+When the user asks about messages or conversations in Telegram:
+1. Use telegramGetRecentTool to show the latest activity
+2. Use telegramGetUnreadTool if they ask specifically about unread
+3. Present the results clearly: chat name, sender, message text, and whether it's unread
 
 ## Code
 When the user asks for code:
@@ -74,5 +81,5 @@ When the user asks for code:
 4. Test when possible
   `,
   model: 'openrouter/qwen/qwen3-32b',
-  tools: { systemCommand: systemCommandTool, browserRead: browserReadTool, writeFile: writeFileTool, weatherTool, webSearch: webSearchTool, telegramSendTool, telegramSearchTool },
+  tools: { systemCommand: systemCommandTool, browserRead: browserReadTool, writeFile: writeFileTool, weatherTool, webSearch: webSearchTool, telegramSendTool, telegramSearchTool, telegramGetRecentTool, telegramGetUnreadTool },
 });

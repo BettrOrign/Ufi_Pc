@@ -78,3 +78,66 @@ export const telegramSearchTool = createTool({
     }
   },
 });
+
+export const telegramGetRecentTool = createTool({
+  id: 'telegram-get-recent',
+  description: 'Get the most recent messages from all Telegram chats. Returns the latest message from each chat, sorted by date. Use when the user says "покажи последние сообщения" or "show recent messages".',
+  inputSchema: z.object({
+    limit: z.number().default(10).describe('Maximum number of messages to return'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    messages: z.array(z.object({
+      id: z.number(),
+      chatId: z.string(),
+      chatName: z.string(),
+      from: z.string(),
+      text: z.string(),
+      date: z.number(),
+      unread: z.boolean(),
+    })),
+    count: z.number(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ limit }) => {
+    try {
+      const { getRecentMessages } = await import('../../telegram-client.mjs');
+      const messages = await getRecentMessages(limit);
+      return { success: true, messages, count: messages.length };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, messages: [], count: 0, error: message };
+    }
+  },
+});
+
+export const telegramGetUnreadTool = createTool({
+  id: 'telegram-get-unread',
+  description: 'Get unread messages from all Telegram chats. Returns unread messages sorted by date. Use when the user says "покажи непрочитанные сообщения" or "show unread messages".',
+  inputSchema: z.object({
+    limit: z.number().default(10).describe('Maximum number of unread messages to return'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    messages: z.array(z.object({
+      id: z.number(),
+      chatId: z.string(),
+      chatName: z.string(),
+      from: z.string(),
+      text: z.string(),
+      date: z.number(),
+    })),
+    count: z.number(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ limit }) => {
+    try {
+      const { getUnreadMessages } = await import('../../telegram-client.mjs');
+      const messages = await getUnreadMessages(limit);
+      return { success: true, messages, count: messages.length };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, messages: [], count: 0, error: message };
+    }
+  },
+});

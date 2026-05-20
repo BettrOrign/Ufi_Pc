@@ -39,6 +39,13 @@ const TELEGRAM_KEYWORDS = [
   'telegram', 'tg',
 ];
 
+const TELEGRAM_READ_KEYWORDS = [
+  'покажи', 'покаж', 'покажите',
+  'прочитай', 'прочитан', 'прочитать',
+  'последн', 'последние',
+  'show', 'read', 'unread', 'latest', 'recent',
+];
+
 const WEATHER_KEYWORDS = [
   'погод', 'температур', 'осадк', 'дожд', 'снег', 'ветр',
   'weather', 'temperature', 'rain', 'snow', 'wind',
@@ -307,11 +314,19 @@ export function detectIntent(text) {
   const hasSendKeywords = hasAnyKeyword(TELEGRAM_SEND_KEYWORDS, lower);
   const hasTelegramKeywords = hasAnyKeyword(TELEGRAM_KEYWORDS, lower);
   const hasIzbrannye = lower.includes('избранные');
+  const hasReadKeywords = hasAnyKeyword(TELEGRAM_READ_KEYWORDS, lower);
 
-  // Trigger: (send keywords + telegram keywords) OR (send keywords + "избранные") OR ("избранные" + telegram keywords)
+  // Don't match as "send" if read/show keywords are present
   if ((hasSendKeywords && (hasTelegramKeywords || hasIzbrannye)) || (hasIzbrannye && hasTelegramKeywords)) {
+    if (!hasReadKeywords) {
+      const query = extractQuery(trimmed);
+      return { type: 'telegram_send', text: query || trimmed, raw: trimmed };
+    }
+  }
+  // 4.5b. Telegram read (show/recent/unread messages)
+  if (hasReadKeywords && hasTelegramKeywords) {
     const query = extractQuery(trimmed);
-    return { type: 'telegram_send', text: query || trimmed, raw: trimmed };
+    return { type: 'telegram_read', text: query || trimmed, raw: trimmed };
   }
   // 4.6. Telegram search — fall through to LLM (no browse)
   if (hasAnyKeyword(TELEGRAM_KEYWORDS, lower)) {

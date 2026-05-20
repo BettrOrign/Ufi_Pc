@@ -272,6 +272,10 @@ const server = createServer(async (req, res) => {
               }
               break;
             }
+            case 'telegram_read': {
+              result = { success: true, message: 'Читаю сообщения Telegram через ассистента...' };
+              break;
+            }
             default:
               result = { success: false, message: 'Unknown intent type' };
           }
@@ -312,6 +316,11 @@ const server = createServer(async (req, res) => {
               console.log(`[FastPath] telegram_send to contact, falling through to slow path`);
               intent = null; // Force slow path
             }
+          }
+          // For telegram_read, always skip fast path and let Mastra Agent handle it
+          if (intent && intent.type === 'telegram_read') {
+            console.log(`[FastPath] telegram_read, falling through to slow path`);
+            intent = null; // Force slow path
           }
 
           if (intent) {
