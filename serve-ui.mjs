@@ -273,7 +273,34 @@ const server = createServer(async (req, res) => {
               break;
             }
             case 'telegram_read': {
-              result = { success: true, message: 'Читаю сообщения Telegram через ассистента...' };
+              try {
+                const { getRecentMessages, getUnreadMessages } = await import('./src/telegram-client.mjs');
+                const isUnread = intent.subtype === 'unread' || (intent.raw || '').toLowerCase().includes('непрочитан');
+                
+                if (isUnread) {
+                  const msgs = await getUnreadMessages(10);
+                  if (msgs.length === 0) {
+                    result = { success: true, message: '✅ Непрочитанных сообщений нет' };
+                  } else {
+                    const text = msgs.map((m, i) => 
+                      `${i + 1}. ${m.chatName} — ${m.from}: ${m.text}`
+                    ).join('\n');
+                    result = { success: true, message: `📨 Непрочитанные сообщения:\n${text}` };
+                  }
+                } else {
+                  const msgs = await getRecentMessages(10);
+                  if (msgs.length === 0) {
+                    result = { success: true, message: '✅ Нет последних сообщений' };
+                  } else {
+                    const text = msgs.map((m, i) => 
+                      `${i + 1}. ${m.chatName} — ${m.from}: ${m.text}${m.unread ? ' [❗]' : ''}`
+                    ).join('\n');
+                    result = { success: true, message: `📨 Последние сообщения:\n${text}` };
+                  }
+                }
+              } catch (e) {
+                result = { success: false, message: 'Ошибка Telegram: ' + e.message };
+              }
               break;
             }
             default:
@@ -317,12 +344,6 @@ const server = createServer(async (req, res) => {
               intent = null; // Force slow path
             }
           }
-          // For telegram_read, always skip fast path and let Mastra Agent handle it
-          if (intent && intent.type === 'telegram_read') {
-            console.log(`[FastPath] telegram_read, falling through to slow path`);
-            intent = null; // Force slow path
-          }
-
           if (intent) {
             console.log(`[FastPath] "${task}" → ${intent.type}`, JSON.stringify(intent));
 
@@ -375,6 +396,37 @@ const server = createServer(async (req, res) => {
                   const { sendToSavedMessages } = await import('./src/telegram-client.mjs');
                   const r = await sendToSavedMessages(intent.text);
                   result = { success: true, message: 'Сообщение отправлено в Избранные ✅' };
+                } catch (e) {
+                  result = { success: false, message: 'Ошибка Telegram: ' + e.message };
+                }
+                break;
+              }
+              case 'telegram_read': {
+                try {
+                  const { getRecentMessages, getUnreadMessages } = await import('./src/telegram-client.mjs');
+                  const isUnread = intent.subtype === 'unread' || (intent.raw || '').toLowerCase().includes('непрочитан');
+                  
+                  if (isUnread) {
+                    const msgs = await getUnreadMessages(10);
+                    if (msgs.length === 0) {
+                      result = { success: true, message: '✅ Непрочитанных сообщений нет' };
+                    } else {
+                      const text = msgs.map((m, i) => 
+                        `${i + 1}. ${m.chatName} — ${m.from}: ${m.text}`
+                      ).join('\n');
+                      result = { success: true, message: `📨 Непрочитанные сообщения:\n${text}` };
+                    }
+                  } else {
+                    const msgs = await getRecentMessages(10);
+                    if (msgs.length === 0) {
+                      result = { success: true, message: '✅ Нет последних сообщений' };
+                    } else {
+                      const text = msgs.map((m, i) => 
+                        `${i + 1}. ${m.chatName} — ${m.from}: ${m.text}${m.unread ? ' [❗]' : ''}`
+                      ).join('\n');
+                      result = { success: true, message: `📨 Последние сообщения:\n${text}` };
+                    }
+                  }
                 } catch (e) {
                   result = { success: false, message: 'Ошибка Telegram: ' + e.message };
                 }
