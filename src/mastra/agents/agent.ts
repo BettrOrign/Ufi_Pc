@@ -10,6 +10,11 @@ const osName = process.platform === 'win32' ? 'Windows'
   : process.platform === 'darwin' ? 'macOS'
   : 'Linux';
 
+// ⚠️ STATELESS AGENT — NO MEMORY.
+// This agent has NO memory configured intentionally.
+// It executes isolated tool calls on behalf of Gemini (main assistant).
+// Gemini handles all conversation context; Mastra just runs tools.
+// No threads, no message persistence, no conversation history.
 export const agent = new Agent({
   id: 'qwen-agent',
   name: 'Ufi',

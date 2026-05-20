@@ -449,7 +449,9 @@ const server = createServer(async (req, res) => {
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ messages: [{ role: 'user', content: task }], maxSteps: 20 }),
+              // maxSteps=3 — stateless agent, no memory needed. Each step = 1 LLM call.
+              // Gemini handles context; Mastra just executes isolated tool calls.
+              body: JSON.stringify({ messages: [{ role: 'user', content: task }], maxSteps: 3 }),
               signal: AbortSignal.timeout(30000),
             },
             3
