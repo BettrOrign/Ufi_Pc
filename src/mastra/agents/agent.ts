@@ -85,6 +85,6 @@ When the user asks for code:
 3. Explain what the code does (but keep it brief)
 4. Test when possible
   `,
-  model: 'openrouter/qwen/qwen3-32b',
+  model: 'groq/qwen/qwen3-32b',
   tools: { systemCommand: systemCommandTool, browserRead: browserReadTool, writeFile: writeFileTool, weatherTool, webSearch: webSearchTool, telegramSendTool, telegramSearchTool, telegramGetRecentTool, telegramGetUnreadTool },
 });
