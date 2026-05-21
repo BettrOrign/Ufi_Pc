@@ -74,21 +74,28 @@ function handleServerMessage(msg) {
             res = stopScreenShare();
           }
           result = { result: res.message, error: res.success ? undefined : res.message };
-        } else if (fc.name === 'mastraAgent') {
-          const { agentId, task } = fc.args;
-          console.log('[WS] mastraAgent:', agentId, task);
-          const resp = await fetch('/api/mastra/agent/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ agentId, task }),
-          });
-          const data = await resp.json();
-          result = { result: data.result || data.error, error: data.error };
         } else if (fc.name === 'showImage') {
           const { source } = fc.args;
           console.log('[WS] showImage:', source);
           addImageMessage(source);
           result = { result: 'Image displayed: ' + source };
+        } else if (fc.name === 'telegramSend' || fc.name === 'telegramSearchContact' || fc.name === 'telegramGetRecent' || fc.name === 'telegramGetUnread') {
+          // Map tool names to API actions
+          const actionMap = {
+            telegramSend: 'send',
+            telegramSearchContact: 'search',
+            telegramGetRecent: 'recent',
+            telegramGetUnread: 'unread',
+          };
+          const action = actionMap[fc.name];
+          const resp = await fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, params: fc.args }),
+          });
+          const data = await resp.json();
+          result = { result: data, error: data.error };
+          console.log('[WS] Telegram:', action, '→', JSON.stringify(data).slice(0, 200));
         } else {
           const { command, args, background } = fc.args;
           console.log('[WS] systemCommand:', command, (args || []).join(' '));

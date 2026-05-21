@@ -44,25 +44,27 @@ mastraAgent — БРАУЗЕР, КОД, ПОГОДА, TELEGRAM
 
 
 ============================================
-TELEGRAM — КАК РАБОТАТЬ
+TELEGRAM — ПРЯМЫЕ ИНСТРУМЕНТЫ
 ============================================
-Любые действия в Telegram делаются через mastraAgent с qwen-agent.
-НЕ пытайся открыть Telegram через браузер или systemCommand (кроме запуска приложения).
+У тебя есть прямые инструменты для Telegram. НЕ используй systemCommand для Telegram.
+
+ИНСТРУМЕНТЫ:
+  ➜ telegramSearchContact — найти контакт в твоём списке контактов
+  ➜ telegramSend — отправить сообщение (chat="me" для Избранных)
+  ➜ telegramGetRecent — показать последние сообщения из чатов
+  ➜ telegramGetUnread — показать непрочитанные сообщения
 
 ЧТО ДЕЛАТЬ:
-  ➜ "найди контакт [имя]" или "есть ли контакт [имя]"
-    → mastraAgent({ agentId: "qwen-agent", task: "найди в телеграме контакт [имя]" })
-  ➜ "напиши [кому] [текст]" (даже если пользователь не сказал "телеграм")
-    → mastraAgent({ agentId: "qwen-agent", task: "отправь в телеграм контакту [кому]: [текст]" })
-  ➜ "напиши привет в избранные"
-    → mastraAgent({ agentId: "qwen-agent", task: "отправь в телеграм: привет" })
-  ➜ "открой телеграм" / "запусти телеграм" (именно открыть приложение)
-    → systemCommand({ command: "Telegram", args: [], background: true })
-  ➜ "открой телеграм веб" (только если пользователь явно попросил веб)
-    → mastraAgent({ agentId: "browser-agent", task: "открой web.telegram.org" })
+  ➜ "напиши в избранные [текст]" → telegramSend({ chat: "me", text: "..." })
+  ➜ "напиши [имя] [текст]" → сначала telegramSearchContact({ query: "имя" }), 
+    потом telegramSend({ chat: "найденный контакт", text: "..." })
+  ➜ "найди контакт [имя]" → telegramSearchContact({ query: "имя" })
+  ➜ "покажи последние сообщения" → telegramGetRecent({ limit: 5 })
+  ➜ "покажи непрочитанные" → telegramGetUnread({ limit: 10 })
+  ➜ "открой телеграм" (приложение) → systemCommand({ command: "Telegram", args: [], background: true })
 
-ВАЖНО: Если пользователь просит что-то связанное с контактами или отправкой
-сообщений — ДУМАЙ про Telegram. Например "напиши Ане привет" → это Telegram.
+ВАЖНО: Если пользователь говорит "напиши [кому] [текст]" — ЭТО Telegram.
+Сначала найди контакт через telegramSearchContact, потом отправь через telegramSend.
 
 ============================================
 ПОКАЗ ИЗОБРАЖЕНИЙ
@@ -95,10 +97,13 @@ SCREEN SHARE
 export const config = { API_KEY, WS_URL, MODEL, DEFAULT_SYSTEM_PROMPT };
 
 export const GEMINI_TOOLS = [{ functionDeclarations: [
-  { name: 'systemCommand', description: '⚠️ Execute TEXT-BASED searches (Wikipedia API, DuckDuckGo API), file operations (cat, ls, node), and launch desktop apps (Telegram, kitty). ⛔ NEVER use for browser/website tasks — no chromium/xdg-open, no curl to HTML pages. For websites (opening sites, clicking, video, music) you MUST use mastraAgent with agentId="browser-agent".', parameters: { type: 'object', properties: { command: { type: 'string', description: 'EXACT binary/program name only. Example: "node", "curl", "ls", "cat", "git" — do NOT include arguments here, put them in args array.' }, args: { type: 'array', items: { type: 'string' }, description: 'Array of arguments for the command, each as a separate string. Example: for "node browser-read.mjs URL", use command="node", args=["browser-read.mjs","URL"]. NEVER repeat the command name as first arg.' }, background: { type: 'boolean', description: 'Run in background (for launching apps like Telegram)' } }, required: ['command'] } },
-  { name: 'mastraAgent', description: '*** CRITICAL: You MUST delegate browser tasks! *** Use for: (1) ALL browser/website tasks → "browser-agent", (2) writing code → "qwen-agent", (3) weather → "weather-agent", (4) Telegram (search contacts, send messages) → "qwen-agent", (5) complex analysis → "qwen-agent". ⚠️ browser-agent is the ONLY way to interact with websites.', parameters: { type: 'object', properties: { agentId: { type: 'string', enum: ['qwen-agent', 'weather-agent', 'browser-agent'], description: 'qwen-agent=general, weather-agent=weather, browser-agent=browser control' }, task: { type: 'string', description: 'Описание задачи на русском. Можно естественным языком.' } }, required: ['agentId', 'task'] } },
+  { name: 'systemCommand', description: '⚠️ Execute TEXT-BASED searches (Wikipedia API, DuckDuckGo API), file operations (cat, ls, node), and launch desktop apps (Telegram, kitty, chromium, nautilus). ⛔ NEVER use for browser/website tasks — no chromium/xdg-open, no curl to HTML pages.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'EXACT binary/program name only. Example: "node", "curl", "ls", "cat", "git" — do NOT include arguments here, put them in args array.' }, args: { type: 'array', items: { type: 'string' }, description: 'Array of arguments for the command, each as a separate string.' }, background: { type: 'boolean', description: 'Run in background (for launching apps like Telegram)' } }, required: ['command'] } },
+  { name: 'telegramSend', description: 'Send a Telegram message. Use chat="me" for Избранные (Saved Messages), or a contact name (like "Анвар"), username, or phone number for other people. The contact MUST be in your Telegram contacts list.', parameters: { type: 'object', properties: { chat: { type: 'string', description: '"me" for Избранные, or contact name/username/phone' }, text: { type: 'string', description: 'Message text' } }, required: ['chat', 'text'] } },
+  { name: 'telegramSearchContact', description: 'Search your Telegram contacts by name, username, or phone. Returns matching contacts from YOUR contact list only (not global search). Use BEFORE sending a message to find the right contact.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Name, username, or phone number to search' }, limit: { type: 'integer', default: 10, description: 'Max results' } }, required: ['query'] } },
+  { name: 'telegramGetRecent', description: 'Get the most recent messages from your Telegram chats. Shows the latest message from each chat, with sender name and text.', parameters: { type: 'object', properties: { limit: { type: 'integer', default: 5, description: 'Number of messages to return' } } } },
+  { name: 'telegramGetUnread', description: 'Get unread messages from your Telegram chats. Shows unread messages with chat name, sender, and text.', parameters: { type: 'object', properties: { limit: { type: 'integer', default: 10, description: 'Number of messages to return' } } } },
   { name: 'toggleScreenShare', description: 'Start or stop screen sharing. Use when user says "ekranga qara" or "screen share".', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop'], description: '"start" or "stop"' } }, required: ['action'] } },
-  { name: 'showImage', description: 'Display an image in the chat. Use when user asks to see a photo or image. FIRST find the image URL from internet (Google images, Wikipedia), THEN use this tool. Source can be a URL (https://...) or local path.', parameters: { type: 'object', properties: { source: { type: 'string', description: 'Image URL or local file path' } }, required: ['source'] } },
+  { name: 'showImage', description: 'Display an image in the chat. Use when user asks to see a photo or image. FIRST find the image URL from internet, THEN use this tool.', parameters: { type: 'object', properties: { source: { type: 'string', description: 'Image URL (https://...)' } }, required: ['source'] } },
 ] }];
 
 export const VOICES = [
@@ -141,7 +146,7 @@ export function getSettings() {
     if (saved) {
       const parsed = JSON.parse(saved);
       // If saved prompt is old version (missing Telegram section), replace with current default
-      if (!parsed.systemPrompt?.includes('TELEGRAM — КАК РАБОТАТЬ')) {
+      if (!parsed.systemPrompt?.includes('ПРЯМЫЕ ИНСТРУМЕНТЫ')) {
         parsed.systemPrompt = DEFAULT_SYSTEM_PROMPT;
       }
       return parsed;

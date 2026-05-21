@@ -533,6 +533,83 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // 📨 Telegram API — direct tools for Gemini (no Mastra Agent)
+    if (url.pathname === '/api/telegram' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const { action, params } = JSON.parse(body);
+          if (!action) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing action' }));
+            return;
+          }
+
+          const { getClient, sendToSavedMessages, sendToContactByName, sendToChat, searchContacts, getRecentMessages, getUnreadMessages } = await import('./src/telegram-client.mjs');
+
+          let result;
+          switch (action) {
+            case 'send': {
+              const { chat, text } = params || {};
+              if (!chat || !text) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing chat or text' }));
+                return;
+              }
+              const isSaved = chat === 'me' || chat === 'saved' || chat === 'избранные' || chat.toLowerCase() === 'избранные';
+              if (isSaved) {
+                result = await sendToSavedMessages(text);
+              } else {
+                try {
+                  result = await sendToContactByName(chat, text);
+                } catch {
+                  result = await sendToChat(chat, text);
+                }
+              }
+              break;
+            }
+            case 'search': {
+              const { query, limit = 10 } = params || {};
+              if (!query) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing query' }));
+                return;
+              }
+              const contacts = await searchContacts(query, limit);
+              result = { success: true, contacts, count: contacts.length };
+              break;
+            }
+            case 'recent': {
+              const { limit = 5 } = params || {};
+              const messages = await getRecentMessages(limit);
+              result = { success: true, messages, count: messages.length };
+              break;
+            }
+            case 'unread': {
+              const { limit = 10 } = params || {};
+              const messages = await getUnreadMessages(limit);
+              result = { success: true, messages, count: messages.length };
+              break;
+            }
+            default:
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Unknown action: ${action}` }));
+              return;
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+          console.log(`[Telegram API] ${action}:`, JSON.stringify(result).slice(0, 150));
+        } catch (err) {
+          console.error('[Telegram API] Error:', err.message);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     // Inject API key into index.html
     if (url.pathname === '/' || url.pathname === '/index.html') {
       let html = await readFile(join(uiDir, 'index.html'), 'utf-8');
