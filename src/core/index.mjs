@@ -11,7 +11,7 @@ import 'dotenv/config';
 export class Core {
   constructor(options = {}) {
     this.port = options.port || 3000;
-    this.uiDir = resolve(process.cwd(), 'ui');
+    this.uiDir = resolve(process.cwd(), 'ui/interface');
     this.events = new EventBus();
     this._services = new Map();  // name -> { status, lastCheck, latency, checkFn }
     this._recoveryAttempts = new Map(); // name -> { count, lastAttempt }
