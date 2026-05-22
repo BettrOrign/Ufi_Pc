@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state } from '../backend/state.js';
 
 let captureInterval = null;
 let captureStream = null;

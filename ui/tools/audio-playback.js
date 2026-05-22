@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state } from '../backend/state.js';
 
 const MAX_QUEUE = 200;
 const MAX_CHUNKS_PER_BATCH = 50;

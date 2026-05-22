@@ -12,3 +12,9 @@ output.txt
 
 # Telegram session
 .telegram-session
+
+# Credentials / auth
+credentials.json
+
+# Runtime data
+reminders.json

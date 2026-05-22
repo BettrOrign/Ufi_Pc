@@ -1,6 +1,6 @@
-import { dom } from './dom.js';
-import { state } from './state.js';
-import { showError } from './ui-helpers.js';
+import { dom } from '../interface/dom.js';
+import { state } from '../backend/state.js';
+import { showError } from '../interface/ui-helpers.js';
 import { stopAudioPlayback } from './audio-playback.js';
 
 export async function startListening() {
@@ -15,7 +15,7 @@ export async function startListening() {
     state.micStream = micStream;
     state.micSource = ctx.createMediaStreamSource(micStream);
 
-    await ctx.audioWorklet.addModule('pcm-processor.js');
+    await ctx.audioWorklet.addModule('../tools/pcm-processor.js');
     state.micWorkletNode = new AudioWorkletNode(ctx, 'pcm-processor', { numberOfOutputs: 0 });
     state.micWorkletNode.port.onmessage = (event) => {
       if (!state.isSessionActive || state.ws?.readyState !== WebSocket.OPEN) return;
@@ -46,7 +46,7 @@ export async function startListening() {
     const nucleusW = document.getElementById('nucleusWrapper');
     if (nucleusW) nucleusW.classList.add('listening');
     dom.micLabel.textContent = 'Gapiryapsiz... To\u2018xtatish uchun bosing';
-    dom.inputArea.classList.remove('visible');
+    // input area is always visible
   } catch (err) {
     console.error('[Mic] Error:', err);
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
