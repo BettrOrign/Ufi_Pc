@@ -25,19 +25,19 @@ export const telegramSendTool = createTool({
       const isSaved = chat === 'me' || chat === 'saved' || chat === 'избранные';
       
       if (isSaved) {
-        const { sendToSavedMessages } = await import('../../telegram-client.mjs');
+        const { sendToSavedMessages } = await import('../../tools/telegram-client.mjs');
         const r = await sendToSavedMessages(text);
         return { success: true, messageId: r.messageId };
       }
 
       // Try sending by contact name first (searches contacts for a match)
-      const { sendToContactByName } = await import('../../telegram-client.mjs');
+      const { sendToContactByName } = await import('../../tools/telegram-client.mjs');
       const r = await sendToContactByName(chat, text);
       return { success: true, messageId: r.messageId, contact: r.contact };
     } catch (err) {
       // Fallback: try sending directly (chat might be a username or phone)
       try {
-        const { sendToChat } = await import('../../telegram-client.mjs');
+        const { sendToChat } = await import('../../tools/telegram-client.mjs');
         const r = await sendToChat(chat, text);
         return { success: true, messageId: r.messageId };
       } catch (fallbackErr) {
@@ -69,7 +69,7 @@ export const telegramSearchTool = createTool({
   }),
   execute: async ({ query, limit }) => {
     try {
-      const { searchContacts } = await import('../../telegram-client.mjs');
+      const { searchContacts } = await import('../../tools/telegram-client.mjs');
       const contacts = await searchContacts(query, limit);
       return { success: true, contacts, count: contacts.length };
     } catch (err) {
@@ -101,7 +101,7 @@ export const telegramGetRecentTool = createTool({
   }),
   execute: async ({ limit }) => {
     try {
-      const { getRecentMessages } = await import('../../telegram-client.mjs');
+      const { getRecentMessages } = await import('../../tools/telegram-client.mjs');
       const messages = await getRecentMessages(limit);
       return { success: true, messages, count: messages.length };
     } catch (err) {
@@ -132,7 +132,7 @@ export const telegramGetUnreadTool = createTool({
   }),
   execute: async ({ limit }) => {
     try {
-      const { getUnreadMessages } = await import('../../telegram-client.mjs');
+      const { getUnreadMessages } = await import('../../tools/telegram-client.mjs');
       const messages = await getUnreadMessages(limit);
       return { success: true, messages, count: messages.length };
     } catch (err) {

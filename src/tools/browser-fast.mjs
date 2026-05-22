@@ -2,8 +2,7 @@
 
 /**
  * browser-fast.mjs — Lightweight browser control for the fast path.
- * Connects to a persistent Chrome instance and executes simple commands.
- * Used by the Intent Router to avoid LLM overhead for common tasks.
+ * Every action opens a NEW browser tab. Tabs are not reused.
  */
 
 import puppeteer from 'puppeteer-core';
@@ -13,20 +12,11 @@ const CHROMIUM_PATH = '/usr/bin/chromium';
 const STATE_FILE = '/tmp/ufi-fast-browser.json';
 
 let browser = null;
-let page = null;
+let _pages = [];  // Track all created pages for cleanup
 
 async function getBrowser() {
-  // Try to reconnect to existing instance
-  if (browser?.connected) {
-    try {
-      if (page && !page.isClosed()) {
-        await page.evaluate(() => document.location.href);
-        return { browser, page };
-      }
-    } catch {
-      // Dead, will relaunch
-    }
-  }
+  // Reconnect to existing instance
+  if (browser?.connected) return browser;
 
   // Try reconnecting from saved state
   if (existsSync(STATE_FILE)) {
@@ -34,9 +24,7 @@ async function getBrowser() {
       const saved = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
       if (saved.wsEndpoint) {
         browser = await puppeteer.connect({ browserWSEndpoint: saved.wsEndpoint });
-        const pages = await browser.pages();
-        page = pages[0] || await browser.newPage();
-        return { browser, page };
+        return browser;
       }
     } catch {
       if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
@@ -63,16 +51,29 @@ async function getBrowser() {
     pid: browser.process()?.pid,
   }));
 
-  const pages = await browser.pages();
-  page = pages[0] || await browser.newPage();
-  return { browser, page };
+  _pages = [];
+  return browser;
+}
+
+async function newPage() {
+  const br = await getBrowser();
+  const pg = await br.newPage();
+  _pages.push(pg);
+  await pg.bringToFront();
+  return pg;
 }
 
 async function closeBrowser() {
   if (browser) {
-    try { await browser.close(); } catch {}
+    try {
+      // Close all tracked pages first
+      for (const pg of _pages) {
+        try { await pg.close(); } catch {}
+      }
+      await browser.close();
+    } catch {}
     browser = null;
-    page = null;
+    _pages = [];
   }
   if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 }
@@ -80,64 +81,84 @@ async function closeBrowser() {
 // ─── Actions ───────────────────────────────────────────────
 
 async function goto(url) {
-  const { page } = await getBrowser();
-  // Add https:// if no protocol
+  const pg = await newPage();
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await new Promise(r => setTimeout(r, 1500)); // settle
-  const title = await page.title();
-  return { success: true, title, url: page.url(), message: `Opened ${url}` };
+  await pg.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await new Promise(r => setTimeout(r, 1500));
+  const title = await pg.title();
+  return { success: true, title, url: pg.url(), message: `Opened ${url}` };
 }
 
 async function youtubeSearch(query) {
-  const { page } = await getBrowser();
-  
-  // Go DIRECTLY to YouTube search results page (fastest path)
+  const pg = await newPage();
   const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`;
-  await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-  
-  // Wait for video results to load
+  await pg.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await new Promise(r => setTimeout(r, 3000));
 
-  // Click the first video result (video title link)
+  const results = await pg.evaluate(() => {
+    const items = [];
+    const links = document.querySelectorAll('a#video-title');
+    links.forEach((a, i) => {
+      if (i < 10) {
+        items.push({
+          title: (a.title || a.textContent || '').trim(),
+          url: a.href || '',
+        });
+      }
+    });
+    return items;
+  });
+
+  return {
+    success: true,
+    results,
+    count: results.length,
+    message: `Нашёл ${results.length} видео по запросу "${query}"`,
+    url: searchUrl
+  };
+}
+
+async function youtubePlay(query) {
+  const pg = await newPage();
+  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`;
+  await pg.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await new Promise(r => setTimeout(r, 3000));
+
   const videoSelector = 'a#video-title';
   try {
-    await page.waitForSelector(videoSelector, { timeout: 5000 });
-    await page.click(videoSelector);
-    // Wait for video page to load
+    await pg.waitForSelector(videoSelector, { timeout: 5000 });
+    await pg.click(videoSelector);
     await new Promise(r => setTimeout(r, 2000));
-    
-    const title = await page.title();
-    const url = page.url();
-    return { success: true, title, url, message: `🎵 Воспроизводится: "${query}" на YouTube` };
+    const title = await pg.title();
+    const url = pg.url();
+    return { success: true, title, url, message: `▶️ Воспроизводится: "${query}"` };
   } catch (err) {
-    // If can't click directly, try alternative selectors
     try {
       const altSelector = 'ytd-video-renderer a#video-title, ytd-video-renderer a.yt-simple-endpoint';
-      await page.waitForSelector(altSelector, { timeout: 3000 });
-      await page.click(altSelector);
+      await pg.waitForSelector(altSelector, { timeout: 3000 });
+      await pg.click(altSelector);
       await new Promise(r => setTimeout(r, 2000));
-      const title = await page.title();
-      const url = page.url();
-      return { success: true, title, url, message: `🎵 Воспроизводится: "${query}" на YouTube` };
+      const title = await pg.title();
+      const url = pg.url();
+      return { success: true, title, url, message: `▶️ Воспроизводится: "${query}"` };
     } catch (err2) {
-      return { success: true, message: `Нашёл результаты для "${query}" на YouTube, но не смог автоматически открыть видео`, url: `${searchUrl}&hl=en` };
+      return { success: true, message: `Нашёл результаты для "${query}", но не смог открыть видео`, url: searchUrl };
     }
   }
 }
 
 async function search(query) {
-  const { page } = await getBrowser();
-  await page.goto(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+  const pg = await newPage();
+  await pg.goto(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
     waitUntil: 'domcontentloaded',
     timeout: 15000,
   });
   await new Promise(r => setTimeout(r, 1000));
-  const title = await page.title();
-  const text = await page.evaluate(() => document.body?.innerText?.slice(0, 2000) || '');
-  return { success: true, title, url: page.url(), message: `Searched for "${query}"`, text };
+  const title = await pg.title();
+  const text = await pg.evaluate(() => document.body?.innerText?.slice(0, 2000) || '');
+  return { success: true, title, url: pg.url(), message: `Searched for "${query}"`, text };
 }
 
 // ─── Main ──────────────────────────────────────────────────
@@ -153,6 +174,9 @@ async function main() {
         result = await goto(args.join(' '));
         break;
       case 'youtube':
+        result = await youtubePlay(args.join(' '));
+        break;
+      case 'youtube-search':
         result = await youtubeSearch(args.join(' '));
         break;
       case 'search':
@@ -170,9 +194,9 @@ async function main() {
     console.log(JSON.stringify({ success: false, message: err.message }));
   }
 
-  // Don't exit — keep browser alive for next call
+  // Keep process alive for next call
   if (action !== 'close') {
-    // Keep process alive but don't exit
+    // Don't exit
   } else {
     process.exit(0);
   }
@@ -184,4 +208,9 @@ if (isMain && process.argv[2]) {
   main();
 }
 
-export { goto, youtubeSearch, search, closeBrowser, getBrowser };
+// Safe status check — does NOT launch browser
+function getBrowserStatus() {
+  return browser?.connected ? 'connected' : 'disconnected';
+}
+
+export { goto, youtubeSearch, youtubePlay, search, closeBrowser, getBrowser, getBrowserStatus };

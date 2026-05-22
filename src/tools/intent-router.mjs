@@ -59,6 +59,18 @@ const APP_LAUNCH_KEYWORDS = [
   'launch', 'application', 'program', 'app',
 ];
 
+const MEDIA_CONTROL_KEYWORDS = [
+  'стоп', 'стопа', 'стопом', 'останови', 'остановит', 'остановка',
+  'пауз', 'pause',
+  'громче', 'громкость', 'тише', 'громкост',
+  'следующий', 'следующ', 'след', 'next', 'следующая',
+  'предыдущий', 'предыдущ', 'prev', 'предыдущая',
+  'продолжи', 'продолж', 'возобнови', 'resume',
+  'выключи музык', 'выключи песн', 'выключи трек', 'выключи видео',
+  'музыку выключ', 'песню выключ',
+  'volume', 'volum',
+];
+
 // Action verbs that suggest search intent (without media/weather/app context)
 const SEARCH_VERBS = ['найди', 'найдите', 'поищи', 'поищите', 'загугли', 'загуглите', 'поиск', 'search', 'find'];
 
@@ -354,7 +366,29 @@ export function detectIntent(text) {
     }
   }
 
-  // 5. Browse by site name
+  // 5. Media control (stop, pause, volume, next, prev)
+  if (hasAnyKeyword(MEDIA_CONTROL_KEYWORDS, lower)) {
+    const lowerRaw = (trimmed || '').toLowerCase();
+    let action = 'play-pause';
+    if (lowerRaw.includes('стоп') || lowerRaw.includes('останов') || (lowerRaw.includes('выключ') && (lowerRaw.includes('музык') || lowerRaw.includes('песн') || lowerRaw.includes('трек') || lowerRaw.includes('видео')))) {
+      action = 'stop';
+    } else if (lowerRaw.includes('пауз') || lowerRaw.includes('pause')) {
+      action = 'pause';
+    } else if (lowerRaw.includes('громче') || (lowerRaw.includes('громкост') && (lowerRaw.includes('больш') || lowerRaw.includes('увелич') || lowerRaw.includes('повыс')))) {
+      action = 'volume-up';
+    } else if (lowerRaw.includes('тише') || (lowerRaw.includes('громкост') && (lowerRaw.includes('меньш') || lowerRaw.includes('уменьш') || lowerRaw.includes('пониз')))) {
+      action = 'volume-down';
+    } else if (lowerRaw.includes('следующ') || lowerRaw.includes('next') || lowerRaw.includes('след')) {
+      action = 'next';
+    } else if (lowerRaw.includes('предыдущ') || lowerRaw.includes('prev') || lowerRaw.includes('пред')) {
+      action = 'previous';
+    } else if (lowerRaw.includes('продолж') || lowerRaw.includes('возобнов') || lowerRaw.includes('resume')) {
+      action = 'play';
+    }
+    return { type: 'media', action, raw: trimmed };
+  }
+  
+  // 6. Browse by site name
   for (const [alias, url] of Object.entries(SITE_ALIASES)) {
     if (lower.includes(alias)) {
       return { type: 'browse', url, raw: trimmed };

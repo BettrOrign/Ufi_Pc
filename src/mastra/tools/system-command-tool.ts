@@ -13,7 +13,7 @@ const ALLOWED_COMMANDS = new Set([
 
 const BLOCKED_SUBSTRINGS = ['sudo', 'su ', 'passwd', 'dd ', 'mkfs', 'chown', 'chgrp', 'shutdown', 'reboot', 'init'];
 
-function isAllowed(command: string): { ok: boolean; reason?: string } {
+function isAllowed(command: string): { ok: false; reason: string } | { ok: true } {
   if (!ALLOWED_COMMANDS.has(command)) {
     return { ok: false, reason: `Command '${command}' is not in the allowed list` };
   }
@@ -53,7 +53,7 @@ function launchBackground(cmd: string, args: string[]): { pid: number | null; me
       cwd: process.cwd(),
     });
     child.unref();
-    return { pid: child.pid, message: `Launched '${cmd}' in background (PID: ${child.pid})` };
+    return { pid: child.pid ?? null, message: `Launched '${cmd}' in background (PID: ${child.pid})` };
   } catch (err) {
     return { pid: null, message: `Failed to launch '${cmd}': ${(err as Error).message}` };
   }
@@ -82,41 +82,40 @@ export const systemCommandTool = createTool({
     try {
       const check = isAllowed(command);
       if (!check.ok) {
-        const output = { message: check.reason, error: check.reason, exitCode: -1 };
-        console.log(`━━━ \x1b[1;36m\u{1F6E1} system-command\x1b[0m ━━━ \x1b[2m${new Date().toLocaleTimeString()}\x1b[0m ━━━`);
-        console.log(`\x1b[1;33m\u{1F4E5} Input:\x1b[0m  ${JSON.stringify(input)}`);
-        console.log(`\x1b[1;31m\u{1F6AB} Blocked:\x1b[0m ${check.reason}`);
-        console.log(`\x1b[2m\u{23F1} ${Math.round(performance.now() - start)}ms\x1b[0m`);
-        console.log(`\x1b[90m\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\x1b[0m`);
-        return output;
+        console.log(`━━━ \x1b[1;36m🛡 system-command\x1b[0m ━━━ \x1b[2m${new Date().toLocaleTimeString()}\x1b[0m ━━━`);
+        console.log(`\x1b[1;33m📥 Input:\x1b[0m  ${JSON.stringify(input)}`);
+        console.log(`\x1b[1;31m🚫 Blocked:\x1b[0m ${check.reason}`);
+        console.log(`\x1b[2m⏱ ${Math.round(performance.now() - start)}ms\x1b[0m`);
+        console.log(`\x1b[90m────────────────────────────────────────────────────────\x1b[0m`);
+        return { message: check.reason, stdout: '', stderr: '', exitCode: -1, error: check.reason };
       }
 
-      let output;
-      if (background) {
-        const bg = launchBackground(command, args);
-        output = { message: bg.message, pid: bg.pid, stdout: '', stderr: '', exitCode: 0 };
+      const bgResult = background ? launchBackground(command, args) : null;
+
+      let result;
+      if (bgResult) {
+        result = { stdout: '', stderr: '', exitCode: 0, message: bgResult.message, pid: bgResult.pid };
       } else {
-        const result = await runCommand(command, args);
-        const stdoutTrimmed = result.stdout.length > 2000 ? result.stdout.slice(0, 2000) + `\n... [${result.stdout.length - 2000} more chars]` : result.stdout;
-        const stderrTrimmed = result.stderr.length > 1000 ? result.stderr.slice(0, 1000) + `...` : result.stderr;
-        output = {
+        const cmdResult = await runCommand(command, args);
+        const stdoutTrimmed = cmdResult.stdout.length > 2000 ? cmdResult.stdout.slice(0, 2000) + `\n... [${cmdResult.stdout.length - 2000} more chars]` : cmdResult.stdout;
+        const stderrTrimmed = cmdResult.stderr.length > 1000 ? cmdResult.stderr.slice(0, 1000) + `...` : cmdResult.stderr;
+        result = {
           stdout: stdoutTrimmed,
           stderr: stderrTrimmed,
-          exitCode: result.exitCode,
-          message: result.exitCode === 0 ? `Command '${command}' completed` : `Command '${command}' failed (exit: ${result.exitCode})`,
+          exitCode: cmdResult.exitCode,
+          message: cmdResult.exitCode === 0 ? `Command '${command}' completed` : `Command '${command}' failed (exit: ${cmdResult.exitCode})`,
         };
       }
 
-      console.log(`━━━ \x1b[1;36m\u{1F6E1} system-command\x1b[0m ━━━ \x1b[2m${new Date().toLocaleTimeString()}\x1b[0m ━━━`);
-      console.log(`\x1b[1;33m\u{1F4E5} Input:\x1b[0m  ${JSON.stringify(input)}`);
-      if (output.stdout) console.log(`\x1b[1;32m\u{1F4E4} stdout:\x1b[0m ${output.stdout.slice(0, 200)}`);
-      if (output.stderr) console.log(`\x1b[1;31m\u{1F4E4} stderr:\x1b[0m ${output.stderr.slice(0, 200)}`);
-      console.log(`\x1b[2m\u{23F1} ${Math.round(performance.now() - start)}ms | exit: ${output.exitCode ?? '-'}\x1b[0m`);
-      console.log(`\x1b[90m\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\x1b[0m`);
-      return output;
+      console.log(`━━━ \x1b[1;36m🛡 system-command\x1b[0m ━━━ \x1b[2m${new Date().toLocaleTimeString()}\x1b[0m ━━━`);
+      console.log(`\x1b[1;33m📥 Input:\x1b[0m  ${JSON.stringify(input)}`);
+      if (result.stdout) console.log(`\x1b[1;32m📤 stdout:\x1b[0m ${result.stdout.slice(0, 200)}`);
+      if (result.stderr) console.log(`\x1b[1;31m📤 stderr:\x1b[0m ${result.stderr.slice(0, 200)}`);
+      console.log(`\x1b[2m⏱ ${Math.round(performance.now() - start)}ms | exit: ${result.exitCode ?? '-'}\x1b[0m`);
+      console.log(`\x1b[90m────────────────────────────────────────────────────────\x1b[0m`);
+      return result;
     } catch (err) {
-      const output = { message: 'Error executing command', error: (err as Error).message, exitCode: -1 };
-      return output;
+      return { message: 'Error executing command', stdout: '', stderr: '', exitCode: -1, error: (err as Error).message };
     }
   },
 });

@@ -122,7 +122,7 @@ async function getClient() {
 
   if (!sessionString) {
     throw new Error(
-      'No Telegram session found. Run `node src/telegram-login.mjs` to authenticate.'
+      'No Telegram session found. Run `node src/auth/telegram-login.mjs` to authenticate.'
     );
   }
 
@@ -154,7 +154,7 @@ async function getClient() {
     await client.disconnect();
     clientInstance = null;
     throw new Error(
-      'Telegram session expired or invalid. Run `node src/telegram-login.mjs` again.\n' +
+      'Telegram session expired or invalid. Run `node src/auth/telegram-login.mjs` again.\n' +
       'Error: ' + err.message
     );
   }
@@ -403,10 +403,25 @@ function hasSession() {
   return !!sessionString;
 }
 
+/**
+ * Safe connection status check — does NOT connect to Telegram servers.
+ * Returns 'connected' if client is active, 'saved' if session exists but not connected, 'disconnected' otherwise.
+ */
+function getConnectionStatus() {
+  if (clientInstance && isReady) {
+    return 'connected';
+  }
+  if (hasSession()) {
+    return 'saved';
+  }
+  return 'disconnected';
+}
+
 export {
   createClient,
   disconnect,
   getClient,
+  getConnectionStatus,
   hasSession,
   saveSessionFile,
   searchContacts,

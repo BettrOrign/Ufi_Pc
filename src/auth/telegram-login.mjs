@@ -4,7 +4,7 @@
  * Telegram Login Script (one-time setup)
  * 
  * Run this ONCE to authenticate with Telegram:
- *   node src/telegram-login.mjs
+ *   node src/auth/telegram-login.mjs
  * 
  * You'll need:
  * 1. TELEGRAM_API_ID and TELEGRAM_API_HASH in .env (from https://my.telegram.org/apps)
@@ -18,7 +18,7 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { createClient, saveSessionFile, disconnect } from './telegram-client.mjs';
+import { createClient, saveSessionFile, disconnect } from '../tools/telegram-client.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 
 // Load .env file if it exists
