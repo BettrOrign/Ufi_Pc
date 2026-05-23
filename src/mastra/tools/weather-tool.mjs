@@ -1,25 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-interface GeocodingResponse {
-  results: {
-    latitude: number;
-    longitude: number;
-    name: string;
-  }[];
-}
-interface WeatherResponse {
-  current: {
-    time: string;
-    temperature_2m: number;
-    apparent_temperature: number;
-    relative_humidity_2m: number;
-    wind_speed_10m: number;
-    wind_gusts_10m: number;
-    weather_code: number;
-  };
-}
-
 export const weatherTool = createTool({
   id: 'get-weather',
   description: 'Get current weather for a location',
@@ -40,7 +21,7 @@ export const weatherTool = createTool({
   },
 });
 
-const getWeather = async (location: string) => {
+const getWeather = async (location) => {
   const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
 
   const geocodingResponse = await fetch(geocodingUrl, {
@@ -50,7 +31,7 @@ const getWeather = async (location: string) => {
     throw new Error(`Geocoding API returned status ${geocodingResponse.status} for '${location}'`);
   }
 
-  const geocodingData = (await geocodingResponse.json()) as GeocodingResponse;
+  const geocodingData = await geocodingResponse.json();
 
   if (!geocodingData.results?.[0]) {
     throw new Error(`Location '${location}' not found`);
@@ -67,7 +48,7 @@ const getWeather = async (location: string) => {
     throw new Error(`Weather API returned status ${response.status}`);
   }
 
-  const data = (await response.json()) as WeatherResponse;
+  const data = await response.json();
 
   if (!data.current) {
     throw new Error(`Weather API returned no current data for '${location}'`);
@@ -84,8 +65,8 @@ const getWeather = async (location: string) => {
   };
 };
 
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
+function getWeatherCondition(code) {
+  const conditions = {
     0: 'Clear sky',
     1: 'Mainly clear',
     2: 'Partly cloudy',

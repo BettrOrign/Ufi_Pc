@@ -42,9 +42,9 @@ export const writeFileTool = createTool({
       };
     } catch (err) {
       return {
-        message: `Failed to write file: ${(err as Error).message}`,
+        message: `Failed to write file: ${err.message}`,
         path,
-        error: (err as Error).message,
+        error: err.message,
       };
     }
   },

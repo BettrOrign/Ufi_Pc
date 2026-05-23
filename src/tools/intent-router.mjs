@@ -226,33 +226,26 @@ function getMatchingKeywords(keywords, lowerText) {
 }
 
 function extractQuery(text) {
-  // Step 1: If text has quoted content, extract the first quoted string as the query
-  // e.g., "Montagem Debado" nomli musiqani topib ijro eting → "Montagem Debado"
   const quoteMatch = text.match(/["""'']["']?([^""''"]+)["""''"]["']?/);
   if (quoteMatch && quoteMatch[1].trim()) {
     return quoteMatch[1].trim();
   }
-  
-  // Step 2: Remove punctuation (but keep apostrophes for words like qo'shig'ini)
+
   const cleaned = text.replace(/[,!?.;:()[\]{}"«»@#$%^&*+=~`]+/g, ' ').trim();
   const words = cleaned.split(/\s+/);
-  
-  // Step 3: Filter words - remove exact noise word matches AND
-  // words that CONTAIN a noise word as substring (e.g., "YouTubeda" contains "youtube")
+
+  const longNoiseWords = [...NOISE_WORDS].filter(nw => nw.length >= 4);
+
   const filtered = words.filter(w => {
     const lower = w.toLowerCase();
-    // Exact match check
     if (NOISE_WORDS.has(lower)) return false;
-    // Substring check: if word contains any noise word that's 4+ chars
-    // This catches "YouTubeda" → "youtube" is in NOISE_WORDS
-    for (const nw of NOISE_WORDS) {
-      if (nw.length >= 4 && lower.includes(nw)) return false;
+    for (const nw of longNoiseWords) {
+      if (lower.includes(nw)) return false;
     }
     return true;
   });
-  
-  const query = filtered.join(' ').trim();
-  return query || text; // fallback to original
+
+  return filtered.join(' ').trim() || text;
 }
 
 // ─── Public API ─────────────────────────────────────────

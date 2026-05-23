@@ -15,65 +15,10 @@ import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const debug = process.env.DEBUG ? console.log : () => {};
 
-/**
- * Find the project root directory by looking for .env file.
- * Checks multiple candidate paths because __dirname changes when compiled by Mastra:
- * - Source: __dirname = src/ → ../.env = project root ✅
- * - Compiled: __dirname = .mastra/output/ → ../.env = .mastra/ ❌
- * So we try multiple locations.
- */
-function findProjectRoot() {
-  // Order of preference: direct candidates first, then try going up
-  const candidates = [
-    process.cwd(),                               // Running from project root (dev/build)
-    path.resolve(__dirname, '..'),               // Source: src/ → project root ✅; Compiled: .mastra/output/ → .mastra/ ❌
-    path.resolve(__dirname, '..', '..'),         // Compiled: .mastra/output/../.. → project root ✅
-    __dirname,                                   // Direct fallback
-  ];
-
-  for (const dir of candidates) {
-    const envPath = path.join(dir, '.env');
-    if (fs.existsSync(envPath)) {
-      return dir;
-    }
-  }
-
-  // Last resort: use process.cwd()
-  return process.cwd();
-}
-
-const PROJECT_ROOT = findProjectRoot();
-
-// Load .env from project root into process.env (Mastra/serve-ui may not do this automatically)
-const __envPath = path.join(PROJECT_ROOT, '.env');
-if (fs.existsSync(__envPath)) {
-  const envContent = fs.readFileSync(__envPath, 'utf-8');
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const eqIndex = trimmed.indexOf('=');
-      if (eqIndex > 0) {
-        const key = trimmed.slice(0, eqIndex).trim();
-        const value = trimmed.slice(eqIndex + 1).trim();
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
-      }
-    }
-  }
-}
-
-// Log where we found the project root (for debugging)
-if (PROJECT_ROOT !== process.cwd()) {
-  console.log(`[Telegram] Project root: ${PROJECT_ROOT} (cwd: ${process.cwd()})`);
-}
-
-const SESSION_FILE = process.env.TELEGRAM_SESSION_PATH
-  || path.join(PROJECT_ROOT, '.telegram-session');
+const SESSION_FILE = process.env.TELEGRAM_SESSION_PATH || path.join(process.cwd(), '.telegram-session');
 
 let clientInstance = null;
 let isReady = false;
@@ -117,6 +62,14 @@ function saveSessionFile(sessionString) {
 async function getClient() {
   if (clientInstance && isReady) return clientInstance;
 
+  if (clientInstance) {
+    try {
+      await clientInstance.disconnect().catch(() => {});
+    } catch {}
+    clientInstance = null;
+    isReady = false;
+  }
+
   const { apiId, apiHash } = getApiCredentials();
   const sessionString = process.env.TELEGRAM_SESSION || loadSessionFile();
 
@@ -138,7 +91,6 @@ async function getClient() {
 
   await client.connect();
 
-  // Log disconnect events
   client.on('disconnect', () => {
     console.warn('[Telegram] Client disconnected');
     isReady = false;
@@ -147,7 +99,6 @@ async function getClient() {
     console.error('[Telegram] Client error:', err.message);
   });
 
-  // Verify session is valid
   try {
     await client.getMe();
   } catch (err) {

@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-function errMsg(err: unknown): string {
+function errMsg(err) {
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -11,7 +11,7 @@ async function getTg() {
 
 export const telegramSendTool = createTool({
   id: 'telegram-send',
-  description: 'Send a message to a Telegram chat or contact. For "Saved Messages" use chat="me". For any contact, you can use their name (е.g. "Анвар"), username, or phone number.',
+  description: 'Send a message to a Telegram chat or contact. For "Saved Messages" use chat="me". For any contact, you can use their name (e.g. "Анвар"), username, or phone number.',
   inputSchema: z.object({
     chat: z.string().describe('Who to send to: "me" or "избранные" for Saved Messages, or a contact name (like "Анвар"), username, or phone'),
     text: z.string().describe('Message text to send'),

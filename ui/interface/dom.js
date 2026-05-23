@@ -1,6 +1,4 @@
 export const dom = {
-  statusDot: document.getElementById("statusDot"),
-  statusText: document.getElementById("statusText"),
   errorBanner: document.getElementById("errorBanner"),
   chatContainer: document.getElementById("chatContainer"),
   centerArea: document.getElementById("centerArea"),
@@ -10,15 +8,11 @@ export const dom = {
   userInput: document.getElementById("userInput"),
   sendBtn: document.getElementById("sendBtn"),
   welcomeMsg: document.getElementById("welcomeMsg"),
-  sidebar: document.getElementById("sidebar"),
-  sidebarToggle: document.getElementById("sidebarToggle"),
   chipsBar: document.getElementById("chipsBar"),
   featureCards: document.getElementById("featureCards"),
   commandPalette: document.getElementById("commandPalette"),
   commandInput: document.getElementById("commandInput"),
   commandResults: document.getElementById("commandResults"),
-  sidebarActions: document.getElementById("sidebarActions"),
-  sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
   nucleusCanvas: document.getElementById("nucleusCanvas"),
   // Service status elements
   statusDotGemini: document.getElementById("statusDotGemini"),

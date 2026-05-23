@@ -1,8 +1,8 @@
 import { Agent } from "@mastra/core/agent";
-import { webSearchTool } from "../tools/web-search-tool";
-import { browserReadTool } from "../tools/browser-read-tool";
+import { webSearchTool } from "../tools/web-search-tool.mjs";
+import { browserReadTool } from "../tools/browser-read-tool.mjs";
 
-function createOscar(): Agent {
+function createOscar() {
   if (!process.env.OPENCODE_API_KEY) {
     console.warn('[Oscar] OPENCODE_API_KEY not set — Oscar agent will use fallback model');
   }
@@ -24,4 +24,4 @@ function createOscar(): Agent {
   });
 }
 
-export const oscar: Agent = createOscar();
+export const oscar = createOscar();

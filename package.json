@@ -4,12 +4,11 @@
   "description": "",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently --kill-others --names \"🤖,🎨\" --prefix-colors \"blue,green\" \"npm:dev:mastra\" \"npm:dev:ui\"",
-    "dev:mastra": "mastra dev",
+    "dev": "node serve-ui.mjs",
     "dev:ui": "node serve-ui.mjs",
-    "build": "mastra build",
-    "start": "mastra start",
-    "electron:dev": "electron ."
+    "electron:dev": "electron .",
+    "build:ui": "cd ui/react-ui && npx vite build",
+    "dev:react": "cd ui/react-ui && npx vite --port 5173"
   },
   "keywords": [],
   "author": "",

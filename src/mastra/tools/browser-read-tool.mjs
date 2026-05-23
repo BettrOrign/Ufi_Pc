@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-function stripHtml(html: string): string {
+function stripHtml(html) {
   return html
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -48,7 +48,7 @@ export const browserReadTool = createTool({
         await releasePage(pg);
       }
     } catch (err) {
-      throw new Error(`Failed to read page: ${(err as Error).message}`);
+      throw new Error(`Failed to read page: ${err.message}`);
     }
   },
 });

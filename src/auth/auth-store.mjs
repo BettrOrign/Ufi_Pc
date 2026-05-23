@@ -139,28 +139,34 @@ const SERVICE_ENV_KEYS = {
   telegram: ['TELEGRAM_API_ID'],
 };
 
+function cloneDefaults() {
+  return JSON.parse(JSON.stringify(DEFAULT_SERVICES));
+}
+
 function loadStore() {
   if (!existsSync(STORE_PATH)) {
-    return { services: { ...DEFAULT_SERVICES } };
+    return { services: cloneDefaults() };
   }
   try {
     const raw = readFileSync(STORE_PATH, 'utf-8');
     const data = JSON.parse(raw);
-    // Merge with defaults to add any new services
-    for (const [id, svc] of Object.entries(DEFAULT_SERVICES)) {
+    if (!data.services || typeof data.services !== 'object') {
+      return { services: cloneDefaults() };
+    }
+    const defaults = cloneDefaults();
+    for (const [id, svc] of Object.entries(defaults)) {
       if (!data.services[id]) {
         data.services[id] = svc;
       }
     }
-    // Remove services that are no longer in DEFAULT_SERVICES
     for (const id of Object.keys(data.services)) {
-      if (!DEFAULT_SERVICES[id]) {
+      if (!defaults[id]) {
         delete data.services[id];
       }
     }
     return data;
   } catch {
-    return { services: { ...DEFAULT_SERVICES } };
+    return { services: cloneDefaults() };
   }
 }
 
@@ -247,11 +253,12 @@ export function disconnectService(serviceId) {
   if (!store.services[serviceId]) return;
   const svc = store.services[serviceId];
 
-  // Remove from process.env
-  for (const key of Object.keys(svc.credentials)) {
+  for (const [key, encryptedValue] of Object.entries(svc.credentials)) {
     try {
-      const plainKey = decrypt(key);
-      delete process.env[plainKey];
+      const plainValue = decrypt(encryptedValue);
+      if (process.env[key] === plainValue) {
+        delete process.env[key];
+      }
     } catch {
       delete process.env[key];
     }

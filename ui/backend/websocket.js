@@ -8,6 +8,7 @@ import { playAudio } from '../tools/audio-playback.js';
 import { startScreenShare, stopScreenShare } from '../tools/screen-capture.js';
 import { updateServiceStatus, updateAuthService } from '../interface/sidebar.js';
 
+import { HANDLERS } from '../tools/handlers/index.js';
 async function execTool(command, args, background) {
   const resp = await fetch('/api/exec', {
     method: 'POST',
@@ -70,127 +71,16 @@ function handleServerMessage(msg) {
       addThinking();
     }
   }
-    if (msg.toolCall) {
+  if (msg.toolCall) {
     console.log('[WS] Tool call:', JSON.stringify(msg.toolCall, null, 2));
     Promise.all(msg.toolCall.functionCalls.map(async (fc) => {
       let result;
       try {
-        if (fc.name === 'toggleScreenShare') {
-          const { action } = fc.args;
-          console.log('[WS] toggleScreenShare:', action);
-          let res;
-          if (action === 'start') {
-            res = await startScreenShare();
-          } else {
-            res = stopScreenShare();
-          }
-          result = { result: res.message, error: res.success ? undefined : res.message };
-        } else if (fc.name === 'showImage') {
-          const { source } = fc.args;
-          console.log('[WS] showImage:', source);
-          addImageMessage(source);
-          result = { result: 'Image displayed: ' + source };
-        } else if (fc.name === 'displayText') {
-          const { text } = fc.args;
-          console.log('[WS] displayText:', text.slice(0, 100));
-          addAssistantMessage(text);
-          result = { result: 'Text displayed on screen' };
-        } else if (fc.name === 'youtubeSearch' || fc.name === 'youtubePlay' || fc.name === 'browserGo') {
-          const actionMap = {
-            youtubeSearch: 'youtube-search',
-            youtubePlay: 'youtube-play',
-            browserGo: 'goto',
-          };
-          const action = actionMap[fc.name];
-          const resp = await fetch('/api/browser', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, params: fc.args }),
-          });
-          const data = await resp.json();
-          result = { result: data, error: data.error };
-          console.log('[WS] Browser:', action, '→', JSON.stringify(data).slice(0, 200));
-        } else if (fc.name === 'telegramSend' || fc.name === 'telegramSearchContact' || fc.name === 'telegramGetRecent' || fc.name === 'telegramGetUnread') {
-          const actionMap = {
-            telegramSend: 'send',
-            telegramSearchContact: 'search',
-            telegramGetRecent: 'recent',
-            telegramGetUnread: 'unread',
-          };
-          const action = actionMap[fc.name];
-          const resp = await fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, params: fc.args }),
-          });
-          const data = await resp.json();
-          result = { result: data, error: data.error };
-          console.log('[WS] Telegram:', action, '→', JSON.stringify(data).slice(0, 200));
-        } else if (fc.name === 'mediaPlay' || fc.name === 'mediaPause') {
-          const resp = await execTool('playerctl', ['play-pause']);
-          result = { result: resp.stdout || 'Toggled play/pause', error: resp.error };
-        } else if (fc.name === 'mediaStop') {
-          const resp = await execTool('playerctl', ['stop']);
-          result = { result: resp.stdout || 'Stopped', error: resp.error };
-        } else if (fc.name === 'mediaNext') {
-          const resp = await execTool('playerctl', ['next']);
-          result = { result: resp.stdout || 'Next track', error: resp.error };
-        } else if (fc.name === 'mediaPrevious') {
-          const resp = await execTool('playerctl', ['previous']);
-          result = { result: resp.stdout || 'Previous track', error: resp.error };
-        } else if (fc.name === 'mediaVolumeUp') {
-          const resp = await execTool('playerctl', ['volume', '0.1+']);
-          result = { result: resp.stdout || 'Volume up', error: resp.error };
-        } else if (fc.name === 'mediaVolumeDown') {
-          const resp = await execTool('playerctl', ['volume', '0.1-']);
-          result = { result: resp.stdout || 'Volume down', error: resp.error };
-        } else if (fc.name === 'setReminder' || fc.name === 'listReminders' || fc.name === 'deleteReminder') {
-          const actionMap = {
-            setReminder: 'create',
-            listReminders: 'list',
-            deleteReminder: 'delete',
-          };
-          const action = actionMap[fc.name];
-          const resp = await fetch('/api/reminder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, params: fc.args }),
-          });
-          const data = await resp.json();
-          result = { result: data, error: data.error };
-          console.log('[WS] Reminder:', action, '→', JSON.stringify(data).slice(0, 200));
-        } else if (fc.name === 'deepResearch') {
-          const { topic } = fc.args;
-          console.log('[WS] deepResearch:', topic);
-          try {
-            const resp = await fetch('/api/research/deep', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ topic }),
-              signal: AbortSignal.timeout(120000),
-            });
-            const data = await resp.json();
-            if (data.report) {
-              removeThinking();
-              addAssistantMessage(data.report);
-              result = { result: '✅ Исследование завершено. Полный отчёт показан на экране.' };
-            } else {
-              result = { result: 'No results found', error: data.error };
-            }
-            console.log('[WS] deepResearch done:', (data.report || '').length, 'chars');
-          } catch (err) {
-            result = { error: 'Deep research failed: ' + err.message };
-          }
+        const handler = HANDLERS[fc.name];
+        if (handler) {
+          result = await handler(fc.args);
         } else {
-          const { command, args, background } = fc.args;
-          console.log('[WS] systemCommand:', command, (args || []).join(' '));
-          const resp = await fetch('/api/exec', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command, args: args || [], background: background || false }),
-          });
-          const data = await resp.json();
-          result = { stdout: data.stdout, stderr: data.stderr, exitCode: data.exitCode, error: data.error };
+          result = { error: `Unknown tool: ${fc.name}` };
         }
       } catch (err) {
         result = { error: err.message };

@@ -1,11 +1,11 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
-import { ALLOWED_COMMANDS, BLOCKED_SUBSTRINGS } from '../../core/command-config';
+import { ALLOWED_COMMANDS, BLOCKED_SUBSTRINGS } from '../../core/command-config.mjs';
 
 const debug = process.env.DEBUG ? console.log : () => {};
 
-function isAllowed(command: string): { ok: false; reason: string } | { ok: true } {
+function isAllowed(command) {
   if (!ALLOWED_COMMANDS.has(command)) {
     return { ok: false, reason: `Command '${command}' is not in the allowed list` };
   }
@@ -17,7 +17,7 @@ function isAllowed(command: string): { ok: false; reason: string } | { ok: true 
   return { ok: true };
 }
 
-function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+function runCommand(cmd, args) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       cwd: process.cwd(),
@@ -37,7 +37,7 @@ function runCommand(cmd: string, args: string[]): Promise<{ stdout: string; stde
   });
 }
 
-function launchBackground(cmd: string, args: string[]): { pid: number | null; message: string } {
+function launchBackground(cmd, args) {
   try {
     const child = spawn(cmd, args, {
       detached: true,
@@ -47,7 +47,7 @@ function launchBackground(cmd: string, args: string[]): { pid: number | null; me
     child.unref();
     return { pid: child.pid ?? null, message: `Launched '${cmd}' in background (PID: ${child.pid})` };
   } catch (err) {
-    return { pid: null, message: `Failed to launch '${cmd}': ${(err as Error).message}` };
+    return { pid: null, message: `Failed to launch '${cmd}': ${err.message}` };
   }
 }
 
@@ -107,7 +107,7 @@ export const systemCommandTool = createTool({
       debug(`\x1b[90m────────────────────────────────────────────────────────\x1b[0m`);
       return result;
     } catch (err) {
-      return { message: 'Error executing command', stdout: '', stderr: '', exitCode: -1, error: (err as Error).message };
+      return { message: 'Error executing command', stdout: '', stderr: '', exitCode: -1, error: err.message };
     }
   },
 });

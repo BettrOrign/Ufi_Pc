@@ -22,7 +22,6 @@ export const webSearchTool = createTool({
     error: z.string().optional(),
   }),
   execute: async ({ query, maxResults = 8 }) => {
-    // Use DuckDuckGo HTML search (scraped, no browser needed)
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
     const response = await fetch(searchUrl, {
@@ -44,7 +43,6 @@ export const webSearchTool = createTool({
 
     const html = await response.text();
 
-    // Check for captcha/blocked
     if (
       html.includes('captcha') ||
       html.toLowerCase().includes('blocked') ||
@@ -57,10 +55,8 @@ export const webSearchTool = createTool({
       };
     }
 
-    // Parse search results from DuckDuckGo HTML — multi-strategy for resilience
-    const results: Array<{ title: string; snippet: string; url: string }> = [];
+    const results = [];
 
-    // ── Strategy 1: extract result blocks by container class ──
     const blockPattern = /<div[^>]*class="[^"]*(?:result|results__item)[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
     const blockMatches = [...html.matchAll(blockPattern)];
     for (const block of blockMatches) {
@@ -77,12 +73,11 @@ export const webSearchTool = createTool({
       }
     }
 
-    // ── Strategy 2: find any structured link+snippet pair ──
     if (results.length === 0) {
       const linkPattern = /<a[^>]*href="(https?:\/\/(?!duckduckgo\.com)[^"]+)"[^>]*class="[^"]*(?:result__a|result__title)[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
       const snippetPattern = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
-      const rawLinks: { url: string; title: string }[] = [];
-      const rawSnippets: string[] = [];
+      const rawLinks = [];
+      const rawSnippets = [];
 
       let m;
       while ((m = linkPattern.exec(html)) !== null) {
@@ -97,10 +92,9 @@ export const webSearchTool = createTool({
       }
     }
 
-    // ── Strategy 3: last resort — extract all external links with text ──
     if (results.length === 0) {
       const allLinks = [...html.matchAll(/<a[^>]*href="(https?:\/\/(?!duckduckgo\.com)[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
-      const seen = new Set<string>();
+      const seen = new Set();
       for (const link of allLinks) {
         if (results.length >= maxResults) break;
         const url = link[1];
